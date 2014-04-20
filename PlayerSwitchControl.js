@@ -92,6 +92,7 @@ function ReactivateControl() { //after a Stop() call, enable again the last cont
 function SetKeyPlayer(newgamer: int) { //set the control of a gamer with an keyboard and jockstick
 	//print("SetKeyPlayer: " + playerName); //if (control == KEY_PLAYER) return;	
 	busy = true;
+	//SendMessage("EndMoving");
 	gameObject.animation.Stop(); //XXX
 	if (control == IA_PLAYER) //check last kind of control
 		DisableScript(IAPlayer);

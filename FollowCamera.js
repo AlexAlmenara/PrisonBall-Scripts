@@ -30,17 +30,14 @@ function SetTarget(targ: Transform) { //the target sent from PrisonRules.js
 	targetOn = true;
 	
 	var characterController : CharacterController = target.collider as CharacterController;
-	if (characterController)
-	{
+	if (characterController) {
 		centerOffset = characterController.bounds.center - target.position;
 		headOffset = centerOffset;
 		headOffset.y = characterController.bounds.max.y - target.position.y;
 	}
 	
 	if (target)
-	{
 		controller = target.GetComponent(PlayerMoveController);
-	}
 	
 	if (!controller)
 		Debug.Log("Please assign a target to the camera that has a Player Controller script component.");
@@ -67,41 +64,31 @@ function LateUpdate () {
 	var targetHead = target.position + headOffset;
 	
 	// When jumping don't move camera upwards but only down!
-	if (controller.IsJumping ())
-	{
-		// We'd be moving the camera upwards, do that only if it's really high
+	if (controller.IsJumping ()) { // We'd be moving the camera upwards, do that only if it's really high
 		var newTargetHeight = targetCenter.y + height;
 		if (newTargetHeight < targetHeight || newTargetHeight - targetHeight > 5)
 			targetHeight = targetCenter.y + height;
 	}
-	// When walking always update the target height
-	else
-	{
+	else { // When walking always update the target height
 		targetHeight = targetCenter.y + height;
 	}
 	
 	// We start snapping when user pressed Fire2!
 	//alex: called from message Center():
-	if (center_input && !isSnapping) //modificado por mi. if (Input.GetButton("Fire2") && !isSnapping)
-	{
+	if (center_input && !isSnapping) { //modificado por mi. if (Input.GetButton("Fire2") && !isSnapping)
 		velocity = Vector3.zero;
 		isSnapping = true;
 	}
 
 	if (isSnapping)
-	{
 		ApplySnapping (targetCenter);
-	}
 	else
-	{
 		ApplyPositionDamping (Vector3(targetCenter.x, targetHeight, targetCenter.z));
-	}
 	
 	SetUpRotation(targetCenter, targetHead);
 }
 
-function ApplySnapping (targetCenter : Vector3)
-{
+function ApplySnapping (targetCenter : Vector3) {
 	var position = transform.position;
 	var offset = position - targetCenter;
 	offset.y = 0;
@@ -123,26 +110,22 @@ function ApplySnapping (targetCenter : Vector3)
 	transform.position = newPosition;
 	
 	// We are close to the target, so we can stop snapping now!
-	if (AngleDistance (currentAngle, targetAngle) < 3.0)
-	{
+	if (AngleDistance (currentAngle, targetAngle) < 3.0) {
 		isSnapping = false;
 		velocity = Vector3.zero;
 	}
 }
 
-function AdjustLineOfSight (newPosition : Vector3, target : Vector3)
-{
+function AdjustLineOfSight (newPosition : Vector3, target : Vector3) {
 	var hit : RaycastHit;
-	if (Physics.Linecast (target, newPosition, hit, lineOfSightMask.value))
-	{
+	if (Physics.Linecast (target, newPosition, hit, lineOfSightMask.value)) {
 		velocity = Vector3.zero;
 		return hit.point;
 	}
 	return newPosition;
 }
 
-function ApplyPositionDamping (targetCenter : Vector3)
-{
+function ApplyPositionDamping (targetCenter : Vector3) {
 	// We try to maintain a constant distance on the x-z plane with a spring.
 	// Y position is handled with a seperate spring
 	var position = transform.position;
@@ -160,8 +143,7 @@ function ApplyPositionDamping (targetCenter : Vector3)
 	transform.position = newPosition;
 }
 
-function SetUpRotation (centerPos : Vector3, headPos : Vector3)
-{
+function SetUpRotation (centerPos : Vector3, headPos : Vector3) {
 	// Now it's getting hairy. The devil is in the details here, the big issue is jumping of course.
 	// * When jumping up and down don't center the guy in screen space. This is important to give a feel for how high you jump.
 	//   When keeping him centered, it is hard to see the jump.
@@ -194,19 +176,16 @@ function SetUpRotation (centerPos : Vector3, headPos : Vector3)
 	var heightToAngle = centerToTopAngle / (centerRayPos.y - topRayPos.y);
 
 	var extraLookAngle = heightToAngle * (centerRayPos.y - centerPos.y);
-	if (extraLookAngle < centerToTopAngle)
-	{
+	if (extraLookAngle < centerToTopAngle) {
 		extraLookAngle = 0;
 	}
-	else
-	{
+	else {
 		extraLookAngle = extraLookAngle - centerToTopAngle;
 		transform.rotation *= Quaternion.Euler(-extraLookAngle, 0, 0);
 	}
 }
 
-function AngleDistance (a : float, b : float)
-{
+function AngleDistance (a : float, b : float) {
 	a = Mathf.Repeat(a, 360);
 	b = Mathf.Repeat(b, 360);
 	

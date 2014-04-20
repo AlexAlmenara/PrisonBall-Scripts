@@ -46,25 +46,25 @@ function OnTriggerEnter (col : Collider) {
 	s_PrisonRules.ReorganizePlayers();*/
 	
 	
-	//********** Action: Burn the player who has collisioned
-	//print("try burn");
-	//s_PrisonRules.BurnPassPlayer(col.gameObject.GetComponent(PlayerBallController).GetPlayerID());
-	//s_PrisonRules.BurnPassPlayer(2);
-	//Input.ResetInputAxes();
-	//col.SendMessage("SetDebug", true);
-	/*yield WaitForSeconds(1);
-	col.SendMessage("IRotateToDefault");*/
-	//col.SendMessage("AutoRotate", Quaternion.Euler(0, 180, 0)); //from Euler degrees, returns the rotation.
-	//yield WaitForSeconds(2);
-	//col.SendMessage("SetKeyGamer1");
-	//col.SendMessage("IRotateTo", Quaternion.Euler(0, 180, 0));
-	
-	
+	//********** Action: Burn the player who has collisioned ************************************************
+	//yiels s_PrisonRules.BurnPassPlayer(col.gameObject.GetComponent(PlayerBallController).GetPlayerID());
+	//s_PrisonRules.BurnPassPlayer(4);
+	s_PrisonRules.SendMessage("BurnPassPlayer", 4);
 	
 	//************ Action: rotate player *************************************
-	var target = GameObject.FindWithTag("Ground").transform;
-	col.gameObject.GetComponent(PlayerMoveController).RotateTo(target.position, 100, 5);
-	//******** end actions
+	//var target = GameObject.FindWithTag("Ball").transform;
+	//yield col.gameObject.GetComponent(PlayerMoveController).RotateTo(target.position, 3); // */
+	//yield col.gameObject.GetComponent(PlayerMoveController).RotateTo(Quaternion.Euler(0, 180, 0), 3);
+	//col.gameObject.SendMessage("RotateToDefault");
+	//******** end actions 
+	
+	
+	//*********** Action: End game: go to GameOverGUI ***************************
+	//Application.LoadLevel("GameOver");
+	
+	
+	//*********** Action: IA opponent throws ball ********************************
+	
 	
 	//Play sound
 	if (sound)

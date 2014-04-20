@@ -13,14 +13,14 @@ private var caught = false; //if catched by a player
 private var grounded = false; //if touched the ground
 private var wasOut = false; //if touch the invisible planes: out from the ground
 private var groundC: GroundControl; //type Script, that controls the dimensions of the ground and has the getArea() function
-private var s_PrisonRules : PrisonRules;
+private var prisonRules: GameObject;//s_PrisonRules : PrisonRules;
 
 function Start () {
 	// do we exist in the level or are we instantiated by an enemy dying?
 	//mover = GetComponent(DroppableMover);
 	//Physics.IgnoreCollision(gameObject.collider, GameObject.Find("Terrain").collider);
 	groundC = GameObject.FindWithTag("Ground").GetComponent(GroundControl);
-	s_PrisonRules = GameObject.FindWithTag("PrisonRules").GetComponent(PrisonRules);
+	prisonRules = GameObject.FindWithTag("PrisonRules"); //.GetComponent(PrisonRules);
 	SetPhysics(true); //actica fisica de pelota, para que le afecte gravedad etc
 	
 	//ignora colisiones con los limites invisibles del campo
@@ -65,9 +65,15 @@ function GetArea() {
 }
 
 //add force to the ball for be thrown with a specified power and direction
-function Throw(power : float, direction : Vector3) {
+function ThrowToDirection(power : float, direction : Vector3) {
 	gameObject.rigidbody.AddForce(direction * power);
 }
+
+/*function ThrowToPosition(power : float, position : Vector3) {
+	var direction = position - transform.position; //heading vector
+	direction = direction / direction.magnitude; //final direction = heading / distance
+	rigidbody.AddForce(direction * power);
+}*/
 
 function IMoveTo(pos: Vector3) { //instant move to posicion. if any force, quit it
 	//rigidbody.velocity = Vector3.zero; //no force, no velocity. XXX: no natural, also get error	
@@ -144,23 +150,25 @@ function OnCollisionEnter(col: Collision) { //if ball touches the terrain or the
 	//if (!caught)	: maybe not enough time to see correctly !catched after thrown
 	//note that if someone is being burning PrisonRules.js will decide to do nothing
 	
-	if (!wasOut) // for not to send a lot of this messages
+	if (!grounded || !wasOut) {
+		if (col.collider.CompareTag("Terrain")) { //Ball collide with Terrain
+			grounded = true; 
+			prisonRules.SendMessage("OnBallGrounded", SendMessageOptions.RequireReceiver);
+		}
+	}
+	
+	if (!wasOut) { // for not to send a lot of this messages
 		if (col.collider.CompareTag("Plane1")) { //Ball collide with invisible Plane1
 			grounded = true;
 			wasOut = true;
-			s_PrisonRules.OnBallOut1();
+			prisonRules.SendMessage("OnBallOut1", SendMessageOptions.RequireReceiver);
 		}
 		else
 		if (col.collider.CompareTag("Plane2")) { //Ball collide with invisible Plane2;
 			grounded = true;
 			wasOut = true;
-			s_PrisonRules.OnBallOut2();
+			prisonRules.SendMessage("OnBallOut2", SendMessageOptions.RequireReceiver);
 		}
+	}
 	
-	else 
-	if (!grounded) 
-		if (col.collider.CompareTag("Terrain")) { //Ball collide with Terrain
-			grounded = true; 
-			s_PrisonRules.OnBallGrounded();
-		}
 }

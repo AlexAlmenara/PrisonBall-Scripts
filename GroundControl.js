@@ -24,7 +24,7 @@ var layerIgnoreGround = 10; //layer to set to the burning player for cross the l
 };*/
 
 //game areas
-static var OUT2 = -2;
+static var OUT2 = -2; //also main areas: AREA1 = 1, AREA2 = 2, but no need to define.
 static var BURNED2 = 22;
 static var GAME2 = 2;
 static var GAME1 = 1;
@@ -58,8 +58,8 @@ private var planeLeft2 : Transform;
 private var planeRight1 : Transform;
 private var planeRight2 : Transform;
 
-function UpdateDimensions() //actualiza las dimensiones del campo: dimensiona y coloca limites
-{ 
+function UpdateDimensions() { //actualiza las dimensiones del campo: dimensiona y coloca limites
+
 	height = heightBurned1 + heightBurned2 + heightGame1 + heightGame2;
 
 	//var limit = this.transform.Find("HLimitCenter/LimitRender"); //limit.transform.localScale.z = width / limit.parent.lossyScale.z;
@@ -165,7 +165,7 @@ function Start () {
 
 
 //activa/desactiva los limites de la cancha. util para que los jugadores cambien de area	
-function SetStateLimits(state : System.Boolean)  {
+function SetStateLimits(state : boolean)  {
 	/*var colliders : Component[];
 	colliders = this.GetComponentsInChildren(Collider); //recorre todos lo colliders de la cancha, los limites
 	for (var col2 : Collider in colliders) { //XXX: be carefull, also the walls
@@ -189,31 +189,29 @@ function SetStateLimits(state : System.Boolean)  {
 	yield;
 }
 
-function IgnoreCollision(obj: GameObject, state : System.Boolean) {
+function IgnoreCollision(obj: GameObject, state : boolean) {
 	if (state)
 		obj.layer = layerIgnoreGround; //player will may cross the limits
 	else
 		obj.layer = 0; //default layer, crossing not allowed
 }
 
-function Reset () {
+function Reset() {
 	UpdateDimensions();
 	SetStateLimits(true);
 }
 
 
 
-function GetArea(pos : Vector3) //dada una posicion devuelve el area en el que esta
-{
+function GetArea(pos : Vector3) { //get the area where the object is, his position is pos.
 	if (pos == null) {
 		print("error: pos null");
 		return OUT1;
 	}
 	
-	if (limitLeft.position == null)
-		print("limit null");
+	//if (limitLeft.position == null) print("limit null");
 		
-	//comprueba si esta fuera por los lados
+	//check if out by the lateral sides (pos.x)
 	if ((pos.x < limitLeft.position.x) || (pos.x > limitRight.position.x)) {
 		if (pos.z < limitCenter.position.z)
 			return OUT1;
@@ -222,14 +220,14 @@ function GetArea(pos : Vector3) //dada una posicion devuelve el area en el que e
 	}
 		
 	
-	//va comprobando secuencialmente cada area	
-	if (pos.z < ground.position.z) // = limitEnd1.position.z
+	//checking sequentially each area: by pos.z
+	if (pos.z < ground.position.z) // equal to limitEnd1.position.z
 		return OUT1;
 		
 	if (pos.z < limitInside1.position.z)
 		return BURNED2;
 	
-	if (pos.z < this.limitCenter.position.z)
+	if (pos.z < limitCenter.position.z)
 		return GAME1;
 		
 	if (pos.z < limitInside2.position.z)
@@ -239,8 +237,27 @@ function GetArea(pos : Vector3) //dada una posicion devuelve el area en el que e
 		return BURNED1;
 		
 	return OUT2;
-
 }
+
+/* Get the main where the object is. it could be 1 or 2. also 0 for out. 
+   Note that we no distinguish between out1 and out2, burned1 and game1 */
+/*function GetMainArea(pos: Vector3) { 
+	if (pos == null) {
+		print("error: pos null");
+		return OUT1;
+	}
+	
+	if ((pos.x < limitLeft.position.x) || (pos.x > limitRight.position.x) || (pos.z < ground.position.z))
+		return 0; //out 1 or out by lateral sides
+	
+	if (pos.z < limitCenter.position.z)
+		return 1;
+	
+	if (pos.z < limitEnd2.position.z)
+		return 2;
+	
+	return 0; //out 2
+}*/
 
 
 /*devuelve posicion inicial de jugador en un area (Vector3) (posicion global)
@@ -312,6 +329,12 @@ function GetPosition(area: int, n: int, i: int) {
 	return pos; //return transform.TransformPoint(pos);
 }
 
+
+function GetPosition(object: GameObject, area: int, n: int, i: int) { //as previous GetPosition function, but the pos.y is not changed
+	var pos : Vector3 = GetPosition(area, n, i);
+	pos.y = object.transform.position.y;
+	return pos;
+}
 /*function OnTriggerEnter(col: Collider) {
 
 	print("Ground: OnTriggerEnter");

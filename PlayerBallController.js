@@ -61,14 +61,14 @@ function Awake() {
 	ball = GameObject.FindGameObjectWithTag("Ball");
 	s_PrisonRules = GameObject.FindGameObjectWithTag("PrisonRules").GetComponent(PrisonRules);
 	
-	UpdateShoulder();
+	//UpdateShoulder(); //better call this in SetPlayerID
 }
 
 function UpdateShoulder() {
 	//if (shoulder != null) //gameObject.SendMessage("RemoveAnimationTransform", shoulder);
 	jointsOk = true;
 	
-	if (gameObject.name.Equals("LerpzPlayer(Clone)")) {
+	if (gameObject.name.Equals("LerpzPlayer(Clone)"+playerID)) {
 	
 		if (leftHanded) {
 			shoulder = gameObject.transform.Find("rootJoint/torso/shoulders/shoulderLeft");
@@ -81,7 +81,7 @@ function UpdateShoulder() {
 		
 		handBallPosition = Vector3(-0.3, -0.3, -0.1);
 	}
-	else if (gameObject.name.Equals("CarlPlayer(Clone)")) {
+	else if (gameObject.name.Equals("CarlPlayer(Clone)"+playerID)) {
 		if (leftHanded) {
 			shoulder = gameObject.transform.Find("Carl/Hips/Spine/Spine1/Spine2/LeftShoulder");
 			hand = gameObject.transform.Find("Carl/Hips/Spine/Spine1/Spine2/LeftShoulder/LeftArm/LeftForeArm/LeftHand");
@@ -123,8 +123,11 @@ function GetPlayerID() {
 	return playerID;
 }
 
-function SetPlayerID(id: int) {
-	playerID = id;
+function SetPlayerID(id: int) { //set the ID of player. also update the object's name and the shoulder for throw the ball.
+ 	playerID = id;
+	
+	gameObject.name += id;
+	UpdateShoulder();
 }
 
 function SetProtection(state: boolean) {
@@ -179,13 +182,13 @@ function CatchBall() : void { //auto catch ball. be careful outside to check no 
 	busy = true;
 	ball.SendMessage("SetCaught", true); //also grounded = false, SetPhysics(false) inside
 	hasBall = true;
-	Physics.IgnoreCollision(gameObject.collider, ball.collider); //if catched: no collisions between this player and the ball. this lets the player to move freely
+	Physics.IgnoreCollision(gameObject.collider, ball.collider); //if Caught: no collisions between this player and the ball. this lets the player to move freely
 	//gameObject.SendMessage("AddAnimationTransform", shoulder); //gameObject.SendMessage("RemoveAnimationTransform", shoulder);
 		
 	//in Update(), AimBall() : ball.transform.position = Vector3(pos.x, raiseBall, pos.z);	
 
-	//in OnBallCatched() of PrisonRules.js: SetController(...)	
-	s_PrisonRules.OnBallCatched(playerID); //avisa que alguien cogio pelota, para reiniciar que nadie sea tocado ahi. -> setController. /* XXX yield*/ 
+	//in OnBallCaught() of PrisonRules.js: SetController(...)	
+	s_PrisonRules.OnBallCaught(playerID); //avisa que alguien cogio pelota, para reiniciar que nadie sea tocado ahi. -> setController. /* XXX yield*/ 
 	SendMessage("Center"); //center camera. to PlayerSwitchControl.js 
 	busy = false;
 }
@@ -215,7 +218,7 @@ function ThrowBall(power: float, direction : Vector3) { //just throw ball withou
 	//ball.SendMessage("SetCaught", false);
 	//Physics.IgnoreCollision(gameObject.collider, ball.collider, false); //reactivate the collisions between this player and the ball
 	s_PrisonRules.OnBallThrown(playerID); //send event that this player has thrown the ball /*XXX yield*/
-	ball.GetComponent(BallControl).Throw(power, direction); //XXX: efficiency. ball.SendMessage("Throw", throwPower, throwDirection);
+	ball.GetComponent(BallControl).ThrowToDirection(power, direction); //XXX: efficiency. ball.SendMessage("Throw", throwPower, throwDirection);
 	//LeaveBall(); //TODO
 	//hasBall = false;
 }
@@ -232,7 +235,7 @@ function ThrowBall(power: float, direction : Vector3) { //just throw ball withou
 	//var pos = transform.TransformPoint(punchPosition);
 	
 	if (hasBall) {
-		//in OnBallCatched() of PrisonRules.js: SetController(...)	    	
+		//in OnBallCaught() of PrisonRules.js: SetController(...)	    	
 		// tirar pelota segun orientacion del jugador
 		//print("keyThrowPower = " + keyThrowPower);
 		var power = Mathf.Clamp(basePower + inputPower, minPower, maxPower); //print("final power = " + power);
@@ -245,7 +248,7 @@ function ThrowBall(power: float, direction : Vector3) { //just throw ball withou
 	busy = false;
 }*/
 
-
+//maybe quit "try" in throw. but remain it in TryCatch
 function TryThrowBall(inputDirection: Vector3, inputPower: float) { //power is in the range [0..1], so convert to [min, max]
 	
 	busy = true;
@@ -254,7 +257,7 @@ function TryThrowBall(inputDirection: Vector3, inputPower: float) { //power is i
 	if (hasBall) {
 		var power : float = Mathf.Lerp(minPower, maxPower, inputPower); //the power is in the range [0..1], so convert to [minPower..maxPower]
 		power = Mathf.Clamp(basePower + power, minPower, maxPower); 
-		print("final power = " + power);
+		print("input power = " + inputPower + ", final power = " + power);
 		
 		var direction = gameObject.transform.forward /*+ baseDirection*/ + inputDirection; //orientation of player + base direction + aim
 		ThrowBall(power, direction);
@@ -279,10 +282,8 @@ function ChangePlayer(inputPower: float) { //Without ball (checked in PlayerCont
 
 function TryPassBall(inputPower: float) { //throw ball with the direction to aimed player, but an opponent could catch it before	
 	print("TryPassBall from " + playerName);
-	/*TODO or not: if (keyThrowPower > umbral) OnFarPassBall() //to the other area of his partners
-		
-	s_PrisonRules.OnPassBall(playerID, Vector3(aimH, aimV, 0), keyThrowPower); //decide the target player depending on (aimH, aimV) and the final direction
-	//OnPassBall will send here ThrowBall() */
+	//TODO or not: if (keyThrowPower > umbral) FarPassBall() //to the other area of his partners
+	//throw. nota: esto es solo tirar a jugador, PrisonRules, no ve esto, solo ve OnBallCaught()
 }
 
 
@@ -291,7 +292,7 @@ function Update() {
 		ball.transform.position = hand.TransformPoint(handBallPosition); // global position
 }
 
-function OnCollisionEnter (col : Collision) {
+function OnCollisionEnter(col : Collision) {
 	//print("playerball collision enter");
 	if ((col.collider.CompareTag("Ball")) ) {
 		//SetTouched(true); //TODO mejorar: que si toca las mnanos no sea tocado.
@@ -303,7 +304,7 @@ function OnCollisionEnter (col : Collision) {
 	} 
 }
 
-function OnDrawGizmosSelected () { //in scene view for debugging: draw sphere of radius to catch ball. 
+function OnDrawGizmosSelected() { //in scene view for debugging: draw sphere of radius to catch ball. 
 	Gizmos.color = Color.red;
 	Gizmos.DrawWireSphere(transform.TransformPoint(handPosition), catchRadius); 
 }

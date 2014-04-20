@@ -57,8 +57,10 @@ function Start() { //TODO: maybe a passive start or Awake or Start
 
 
 /*function OnEnable() {
-	print("key on enabled");
-	CopyFromController(); //note: no need to call this in Start() because this script must be disabled at the beginning
+	yield;
+	SendMessage("EndMoving");
+	//print("key on enabled");
+	//CopyFromController(); //note: no need to call this in Start() because this script must be disabled at the beginning
 }*/
 
 function CopyFromController() { //copies the necessary data from PlayerBallController and PlayerMoveController
@@ -221,7 +223,7 @@ function Update() {
 		var jump = Input.GetButton(key_jump);
 		
 		//if (debug) //TODO: quit //print("v = " + v + ", h = " + h);
-		s_PlayerMove.UpdateMove(v, h, run, jump, true);
+		s_PlayerMove.UpdateKeyMove(v, h, run, jump, true);
 	}
 }
 

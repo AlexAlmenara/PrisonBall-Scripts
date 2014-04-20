@@ -21,6 +21,8 @@ var walkSpeed = 3.0; // The speed when walking
 var trotSpeed = 4.0; // after trotAfterSeconds of walking we trot with trotSpeed
 var runSpeed = 6.0; // when pressing "Fire3" button (cmd) we start running
 
+var rotateSpeed = 4.0; //120.0
+
 var inAirControlAcceleration = 3.0;
 
 
@@ -31,7 +33,6 @@ var gravity = 20.0; // The gravity for the character
 
 var controlledDescentGravity = 2.0; // The gravity in controlled descent mode
 var speedSmoothing = 10.0;
-var rotateSpeed = 500.0; //120.0
 var trotAfterSeconds = 3.0;
 
 var canJump = true;
@@ -101,13 +102,13 @@ static var MAX_TIME = 10.0; //maximum time for auto rotate and move
 var angleLookAt = 5.0; //necessary angle to look at a position
 //var angleLost = 40.0; //angle that defines that player has lost sight of target
 
-var goRotateSpeed = 20.0; //speed to rotate while he's walking or running
+//var goRotateSpeed = 20.0; //speed to rotate while he's walking or running
 
 var stopSpeed = walkSpeed * 0.3; //speed to determinate we should stop moving because we are front of a wall or something
 
 var actionRadius = 3.0; //area in which the player can move around its default position
 
-var reachDistance = 0.6; //necessary distance to target position to considerate that we have reached
+var reachDistance = 1.3; //0.6; //necessary distance to target position to considerate that we have reached
 
 //**** default situation in PrisonBall **************
 private var defPos: Vector3; //default position of player
@@ -183,8 +184,10 @@ function SetGamer(state: boolean) {
 	isGamer = state;
 	isControllable = state;
 	
-	if (state)
+	if (state) {
+		Reset();
 		canControlDescent = true;
+	}
 	else { //set variables for not to be controllable: IAPlayer. for correct animations
 		slammed = false;
 		jumping = false;
@@ -195,22 +198,27 @@ function SetGamer(state: boolean) {
 }
 
 
-function StartMoving() { //TODO: if player is a gamer, stop c
+function StartMoving(speed: float) { //TODO: if player is a gamer, stop c
 	if (isGamer) {
 		isControllable = false;	
 		//disable kinect, call StopeControl() //not gamer: IsGroundedWithTimeout() always true
 	}
+	
+	yield;
+	AutoSpeed(speed);
 }
 
 function EndMoving() { //this functions must be called with isControllable = false before
 	//isControllable = false; yield;
+	AutoSpeed(0);
+	yield;
 	
 	if (isGamer) {
 		//print("endmoving: isGamer");
 		//TODO: if kinect: enable again Kinect and disable animation: call ReactivateControl()
 		lastGroundedTime = Time.time + 2; //for get IsGroundedWithTimeout() to true when reactivate control
 		SendMessage("Center"); //to PlayerSwitchControl.js
-		yield WaitForSeconds(1);
+		yield;// WaitForSeconds(1); //TODO
 		Reset(); //inside isControllable = true;
 	}
 	else
@@ -221,150 +229,125 @@ function SimpleMove(direction : Vector3) { //although this seems useless, we nee
 	characterController.SimpleMove(direction);
 }
 
-/*function WaitIdle(seconds: float) {
-	var time = 0.0;
-	
-	while (time < seconds) {
-		time += Time.deltaTime;
-		UpdateMove(0, 0, false, false, true);
-		yield;
-	}
-}*/
-
-function RotateTowardsPosition(targetPos : Vector3, rotateSpeed : float) : float {
-
-	//moveDirection = Vector3.RotateTowards(moveDirection, targetDirection, rotateSpeed * Mathf.Deg2Rad * Time.deltaTime, 1000);
-	
-	// Compute relative point and get the angle towards it
+function AngleToPosition(targetPos: Vector3) { //return the angle to the target position. this is the angle we need to rotate to look at position
 	var relative = transform.InverseTransformPoint(targetPos);
-	var angle = Mathf.Atan2 (relative.x, relative.z) * Mathf.Rad2Deg;
-	// Clamp it with the max rotation speed
-	var maxRotation = rotateSpeed * Time.deltaTime;
-	var clampedAngle = Mathf.Clamp(angle, -maxRotation, maxRotation);
-	// Rotate
-	transform.Rotate(0, clampedAngle, 0);
-	// Return the current angle
-	return angle;
+	return Mathf.Atan2(relative.x, relative.z) * Mathf.Rad2Deg;
 }
-
-/*XXX: // http://answers.unity3d.com/questions/26783/how-to-get-the-signed-angle-between-two-quaternion.html
-function AngleDiff(sourceRotation: Quaternion, targetRotation: Quaternion) : float { 
-	
-	var sourceForward = sourceRotation * Vector3.forward; // get a "forward vector" for each rotation
-	var targetForward = targetRotation * Vector3.forward;
-	
-	var sourceAngle = Mathf.Atan2(sourceForward.x, sourceForward.z) * Mathf.Rad2Deg; // get a numeric angle for each vector, on the X-Z plane (relative to world forward)
-	var targetAngle = Mathf.Atan2(targetForward.x, targetForward.z) * Mathf.Rad2Deg;
-	 
-	return Mathf.DeltaAngle(sourceAngle, targetAngle); // get the signed difference in these angles
-}*/
 
 //**** functions that moves player automatically without inputs. if isGamer, the control will be desactivated the movement ***********
 
+//set the specified rotatio by steps
 function RotateTo(targetRotation: Quaternion, speed: float) { //set the rotation (by steps). Angular speed in degrees per sec. No limit of time.
-	var step = speed * Time.deltaTime; //The step size is equal to speed times frame time
+	yield StartMoving(speed);
+	
+	var step = speed * Time.deltaTime; //Need for be independt of frame rate. speed in m/s. The step size is equal to speed times frame time
 	
 	while (true) {
-		transform.rotation = Quaternion.Lerp(transform.rotation, targetRotation, step); //print("euler = " + transform.eulerAngles);
-		if (Quaternion.Angle(transform.rotation, targetRotation) < angleLookAt) { //Quaternion.Angle
-			print("rotateTo tagetRotation breakk");
+		transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, step); //linear interpolattion. print("euler = " + transform.eulerAngles);
+		if (Quaternion.Angle(transform.rotation, targetRotation) < angleLookAt) { //difference between rotations
+			//print("rotateTo tagetRotation breakk");
 			break;
 		}
 			
 		yield;
 	}
 	
-	EndMoving();
+	yield EndMoving();
 }
 
-//rotate to look at position (by steps). the maximum time specified may be null. returns the time of rotate
-function RotateTo(targetPos : Vector3, speed : float, maxTime : float) { 
-	// As we near an angle of 0, we will begin to move
-	var angle : float = 180.0;
-	var time = 0.0;
-	var direction : Vector3;
-	var move : float;
+/* Rotate to look at position (by steps). Note that position is fixed, no variable
+   inspirated in SmoothLookAt.js. this could have done using Vector3.RotateTowards */
+function RotateTo(targetPos : Vector3, speed : float) { 
+	yield StartMoving(speed);
+
+	var step = speed * Time.deltaTime;	
 	
-	//var endCondition = true; //end-condition initialized to entry to loop at least once
-	print("Start RotateTo");
-	//UpdateMove(0, 0, false, false, false);
-	StartMoving();
-	yield;
-	AutoSpeed(speed); //no controllable. PlayerAnimation.Update() will read this to decide animation. XXX: maybe he runs xD
+	var targetRotation = Quaternion.LookRotation(targetPos - transform.position);
+	targetRotation.x = transform.rotation.x; //we only want to change the y component, so x and z will be no modified
+	targetRotation.z = transform.rotation.z;
 	
-	print("before while");
 	while (true) {
-		print("while");
-		time += Time.deltaTime;
-		angle = Mathf.Abs(RotateTowardsPosition(targetPos, speed));
-		move = Mathf.Clamp01((90 - angle) / 90);
-		
-		// depending on the angle, start moving
-		//animation["attackrun"].weight = animation["attackrun"].speed = move;
-		direction = transform.TransformDirection(Vector3.forward * speed * move);
-		characterController.SimpleMove(direction);
-		if (maxTime <= 0) {
-			if ((angle < angleLookAt) || (time >= MAX_TIME)) //by security is better set other max time
-				break;
+		transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, step);
+		if (Mathf.Abs(AngleToPosition(targetPos)) <= angleLookAt) { //relative position with enough angle. note that is a different checking
+			//print("rotateTo targetPosition breakk");
+			break;
 		}
-		else
-			if ((angle < angleLookAt) || (time >= maxTime))
-				break;
 		
 		yield;
-		print("roting");
 	}
 	
-	print("sale de while");
-	AutoSpeed(0); //UpdateMove(0, 0, false, false, true); //controllable again
-	yield;
-	EndMoving(); 
-	print("fin rotateTo");
+	yield EndMoving();
 }
 
 
+//Rotate to look at position and then will move to position. TODO: quit maxTime, only check local constant
 function MoveTo(targetPos: Vector3, speed : float, maxTime: float) { //move obj to the position pos, with a maximum time. if time <= 0, no limit of time.
 	var time : float = 0.0; //MoveTo
-	var angle : float; //XXX: creo que no hace falta porque pos es fija
+	var step : float;
 	var direction : Vector3;
-	var move : float;
+	var distance : float;
 	
-	StartMoving();
-	yield;
-	AutoSpeed(speed); //animation.CrossFade("walk"); //TODO: put in PlayerAnimation.js. learn more about animations
+	yield StartMoving(speed);
 	
-	//yield RotateTo(targetPos, rotateSpeed, maxTime); 
-	transform.LookAt(targetPos); //rotate to see te new position. TODO: rotation
-	//yield WaitForSeconds(1);
+	//RotateTo(targetPos, walkSpeed) without StartMoving and EndMoving. //transform.LookAt(targetPos);
+	step = rotateSpeed * Time.deltaTime;
+	var targetRotation = Quaternion.LookRotation(targetPos - transform.position);
+	targetRotation.x = transform.rotation.x; //we only want to change the y component, so x and z will be no modified
+	targetRotation.z = transform.rotation.z;	
+	while (true) {
+		transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, step);
+		if (Mathf.Abs(AngleToPosition(targetPos)) <= angleLookAt) {
+			//print("rotateTo tagetPosition breakk");
+			break;
+		}
+			
+		yield;
+	}
 	
+	//Move:
+	step = speed * Time.deltaTime;
 	while (time < maxTime) { 
 		time += Time.deltaTime;	
 		
-		angle = Vector3.Angle(transform.position, targetPos);
-		move = Mathf.Clamp01((90 - angle) / 90);
-		direction = transform.TransformDirection(Vector3.forward * move * speed);
+		/*transform.position = Vector3.MoveTowards(transform.position, targetPos, step); //move position a step closer to the target
+		if (transform.position == targetPos) { //reach to position. MoveTowards returns the target position when is closer than step
+			print("MoveTo: reach to position");
+			break;
+		}*/
+		
+		//rotate again for safety: if he finds obstacles we need this
+		targetRotation = Quaternion.LookRotation(targetPos - transform.position);
+		targetRotation.x = transform.rotation.x;
+		targetRotation.z = transform.rotation.z;
+		transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, step); 
+		
+		//move
+		direction = transform.TransformDirection(Vector3.forward * speed); //in m/s, no need to use deltaTime
 		characterController.SimpleMove(direction);
 		
-		if ((transform.position - targetPos).magnitude < reachDistance) //TODO: calculate step distance, because if he goes fast, he'll exceed and no break
-			break; //we have reached, so finish
-		
-		// We are not actually moving forward. This probably means we ran into a wall or something. Stop moving
-		//if (characterController.velocity.magnitude < stopSpeed) break;
-			
-		if ((maxTime > 0) && (time >= maxTime))
+		//check if enough close
+		distance = Vector3.Distance(transform.position, targetPos); //(transform.position - targetPos).magnitude
+		if ((distance <= step) || (distance <= reachDistance))
+			break; //we have reached, so finish*/
+						
+		if ( ((maxTime > 0) && (time >= maxTime)) || (time >= MAX_TIME))
 			break; //end of while
 			
 		yield;
+		// We are not actually moving forward. This probably means we ran into a wall or something. Stop moving
+		//if (characterController.velocity.magnitude < stopSpeed) break;
 	}
 	
-	AutoSpeed(0); //animation.CrossFade("idle");	
-	transform.position = targetPos; //IMove: partial solution if no arrive
-	yield;
-	EndMoving(); //print("finish moveTo");
+	transform.position = targetPos; //IMove: in case of no reach before, set the target position right now
+	yield EndMoving();
 }
 
-function RotateTo(pos: Vector3, maxTime: float) {
-	yield RotateTo(pos, rotateSpeed, maxTime);
+function RotateTo(pos: Vector3) {
+	yield RotateTo(pos, rotateSpeed);
+}
+
+function RotateTo(rot: Quaternion) {
+	yield RotateTo(rot, rotateSpeed);
 }
 
 function MoveTo(pos: Vector3, runCommand : boolean, maxTime: float) {
@@ -376,55 +359,53 @@ function MoveTo(pos: Vector3, runCommand : boolean, maxTime: float) {
 }
 
 
-
-
-//TODO: rotate to look position and then will move. the maximum time specified may be null. returns the total time
-/*function MoveTo2(targetPos: Vector3, runCommand : boolean, maxTime: float) { //player move to a non variable position in a maximum time
-	isControllable = false;
-	
-	var angle : float = 180.0;
-	var direction : Vector3;
-	//var endCondition = true; //end-condition initialized to entry to loop at least once
-	
-	var time : float = Time.time; //System.DateTime.Now.Second;
-	yield RotateTo(targetPos, rotateSpeed, maxTime); //first rotate to look at position
-	time = Time.time - time; //how long time rotation. so the rest of time is maxTime - time
-		
-	//SetSpeed(speed); //PlayerAnimation.Update() will read this to decide animation.
-
-	while (true) {
-		time += Time.deltaTime;
-		angle = RotateTowardsPosition(targetPos, goRotateSpeed);
-			
-		//if (Mathf.Abs(angle) > angleLost) //if angle is larger than 40 degrees that means the target is out of sight
-		//	lostSight = true;
-		
-		direction = transform.TransformDirection(Vector3.forward); // * speed);
-		direction = Vector3(Mathf.Sign(direction.x), 0, Mathf.Sign(direction.z));
-		//UpdateMove(direction.x, direction.z, runCommand, false, true);  //characterController.SimpleMove(direction); // Move forward at constant speed
-
-		if ((transform.position - targetPos).magnitude < reachDistance)
-			break; //we have reached, so finish
-		
-		// We are not actually moving forward. This probably means we ran into a wall or something. Stop moving
-		if (characterController.velocity.magnitude < stopSpeed)
-			break;
-			
-		if ((maxTime > 0) && (time >= maxTime))
-			break; //end of while
-		
-		//print("moving");
-		yield;
+/* Rotate for look at position only during a frame.
+   it's a incomplete movement, so we need to call this function several times (one per frame)
+   Used only for IAPlayers, so no need to call StartMoving and EndMoving
+   Return false if no rotation: the total movement has finished */
+function UpdateRotateTo(targetPos: Vector3, speed : float) {
+	if (Mathf.Abs(AngleToPosition(targetPos)) <= angleLookAt) {
+		moveSpeed = 0;
+		return false;
 	}
+	
+	moveSpeed = speed;
+	var targetRotation = Quaternion.LookRotation(targetPos - transform.position);
+	targetRotation.x = transform.rotation.x; //we only want to change the y component, so x and z will be no modified
+	targetRotation.z = transform.rotation.z;
+	transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, speed * Time.deltaTime);
+	return true;
+}
 
-
-	UpdateMove(0, 0, false, false, true); //SetSpeed(0.0);
-	EndMoving(); //print("fin MoveTo");
-}*/
+/* Move to position only during a frame.
+   it's a incomplete movement, so we need to call this function several times (one per frame)
+   Used only for IAPlayers, so no need to call StartMoving and EndMoving
+   Return false if no move: the total movement has finished */
+function UpdateMoveTo(targetPos: Vector3, speed : float) {
+	var step = speed * Time.deltaTime;
+	var distance = Vector3.Distance(transform.position, targetPos); 
+	if ((distance <= step) || (distance <= reachDistance)) { //if ((transform.position - targetPos).magnitude <= reachDistance) {
+		moveSpeed = 0; //AutoSpeed(0); //print("updateMoveTo: reached");
+		return false; //we have reached, so finish
+	}
+	
+	moveSpeed = speed;
+	
+	//rotate. without check angleLookAt. Slerp no exceeds the rotation
+	var targetRotation = Quaternion.LookRotation(targetPos - transform.position);
+	targetRotation.x = transform.rotation.x; //we only want to change the y component, so x and z will be no modified
+	targetRotation.z = transform.rotation.z;	
+	transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, step);
+	
+	//move
+	var direction = transform.TransformDirection(Vector3.forward * speed); //in m/s, no need to use deltaTime
+	characterController.SimpleMove(direction);		
+	return true;
+}
 
 
 function IRotateTo(rotation: Quaternion) { //instant rotate
-	StartMoving();
+	StartMoving(0);
 	yield;
 	transform.rotation = rotation;
 	yield;
@@ -433,7 +414,7 @@ function IRotateTo(rotation: Quaternion) { //instant rotate
 
 
 function IRotateTo(targetPos: Vector3) { //instant rotate look at position
-	StartMoving();
+	StartMoving(0);
 	yield;
 	transform.LookAt(targetPos);
 	yield;
@@ -441,11 +422,12 @@ function IRotateTo(targetPos: Vector3) { //instant rotate look at position
 }
 
 function IMoveTo(targetPos: Vector3) { //instant move to posicion. if any force, quit it		
-	StartMoving();
+	StartMoving(0);
 	transform.position = targetPos;
 	yield;
 	EndMoving();
 }
+
 
 
 //******** functions relationed with defPos and defRot **************************************
@@ -476,23 +458,38 @@ function IRotateToDefault() {
 	IRotateTo(defRot);
 }
 
-function MoveToDefault(runCommand: boolean, time : float) { //player move to the default position and rotation, with a duration of time seconds
+function RotateToDefault() {
+	yield RotateTo(defRot);
+}
+
+function IRotateToDefaultBackwards() { //rotate 180 degrees. useful for change the direction of game
+	IRotateTo(defRot * Quaternion.Euler(0, 180, 0));
+}
+
+function RotateToDefaultBackwards() { //rotate 180 degrees. useful for change the direction of game
+	yield RotateTo(defRot * Quaternion.Euler(0, 180, 0));
+}
+
+function MoveToDefault(runCommand: boolean, time : float) { //player move to the default position, with a duration of time seconds
 	yield MoveTo(defPos, runCommand, time); //yield MoveTo(defPos, false, time); //XXX: walking
-	yield RotateTo(defRot, rotateSpeed); //TODO, speed
 }
 
 function MoveToDefault(time: float) {
 	yield MoveToDefault(false, time); //walking
 }
 
-function IMoveToDefault() { //immediate move to the default position and rotation
-	StartMoving();
+function IMoveToDefault() {
+	IMoveTo(defPos);
+}
+
+/*function IMoveRotateToDefault() { //immediate move to the default position and rotation
+	StartMoving(0);
 	yield;
 	transform.rotation = defRot; //IRotate
 	transform.position = defPos; //IMove
 	yield;
 	EndMoving();
-}
+}*/ 
 
 
 //************ functions of ThirdPersonController.js (with modifications) **********
@@ -645,15 +642,13 @@ function DidJump () {
 	lastJumpButtonTime = -10;
 }
 
-function UpdateMove(vCommand : float, hCommand : float, runCommand: boolean, jumpCommand : boolean, controllable : boolean) {	
+function UpdateKeyMove(vCommand : float, hCommand : float, runCommand: boolean, jumpCommand : boolean, controllable : boolean) {	
 	v = vCommand;
 	h = hCommand;
 	toRun = runCommand;
 	toJump = jumpCommand;
 	isControllable = controllable;
-//}
 
-//function Update() {
 	//if (!isControllable)
 		//return;
 		

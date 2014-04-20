@@ -1,22 +1,30 @@
 #pragma strict
-//a bit inspirated in EnemyPoliceGuy.js (see more in PlayerMoveController.js). also a bit inspirated in ThirdPersonController.js
+//a bit inspirated in EnemyPoliceGuy.js of 3DPlatform(see more in PlayerMoveController.js). also a bit inspirated in ThirdPersonController.js
 
 //this script must be disabled at the beginning
 
 /*
-Script para controlar a un IAPerson, jugador controlado por la maquina, ya sea oponente o no.
-La parte de controlar la pelota (coger, apuntar, tirar) lo hace aparte el script IAPlayerBall.js
 
-Tiene un objetivo: target que dependera de si defiende o ataca.
-El IAPlayer tiene dos estados: ATTACK, DEFEND. 
-- DEFEND: target=pelota. En defensa puede tener distintos comportamientos, dependiendo de la situacion, nivel de dificultad, etc.
-  Puede intentar atrapar la pelota (con riesgo de rebotarle y ser brilado), o escapar de la pelota.
-- ATTACK: target=algun jugador. Tiene que controlarse el cambio de jugador segun situacion, por ej, al oponente mas cercano
-	Apuntara y tirara la pelota. La velocidad de apuntar y fuerza de tirar dependera del nivel de dificultad.
-	Tener en cuenta que si pertenece al equipo oponente: al subir el nivel las caracteristicas mejoraran,
-	mientras que si pertenece al equipo del jugador unico, entonces podria disminuir las caracteristicas.
-- HELP: 
-- NONE: for example for move to other position. TODO
+Script for control an IAPlayer, player controlled by the system, no by the gamer. He could be an opponent or a partner of a gamer.
+
+He has a target object: it depends on attack or defend.
+The IAPlayer has 4 states:
+- DEFEND: target=ball. He could have different behaviours, depending of the situation, difficult level, etc.
+ He can try steal the ball (with the risk of let it off and then be burned), or simply try to scape from the ball.
+ 
+- ATTACK: target = a player of the opposite team. The player will try to burn the target player.
+ It's necessary to control the change of target, for example: the nearest opponent.
+ Aim and then throw the ball. The velocity of aim and the strength of thrown depends of the difficult level.
+ Bear in mind that the features will be different if the player is the opponent of the gamer or not (only one team with gamer/s): 
+ if he's an opponent the features will be improved with the difficult level, 
+ while if he's a partner of the gamer, the feautures will aggravate with the level.
+
+ As a less useful behaviour, the player could pass the ball to a partner. Useful to deceive opponents and burn someone of then easier.
+ 
+- HELP: target=ball or maybe other target. A partner is attacking, so this player must have a colaborative behaviour. 
+  The most simple behaviour is being idle, like state IDLE.
+  
+- IDLE (none): no target, no actions. Useful for example to move to other position. TODO
 */
 
 /*
@@ -32,28 +40,30 @@ private var characterController : CharacterController; // Cache a reference to t
 static var ATTACK = 1; //attack with ball
 static var HELP = 2; //if a partner has the ball: this player will help
 static var DEFEND = 0; //an opponent has the ball: defend, trying to not be burned 
+static var IDLE = -1; //no actions
 
 private var action = HELP; //current action. by default is help
 
-private var s_PlayerBall: PlayerBallController; //scripts
+private var s_PlayerBall: PlayerBallController; //scripts of player
 private var s_PlayerMove: PlayerMoveController; 
-private var s_ballControl : BallControl;
+private var s_ballControl : BallControl; //script of ball. XXX: maybe only use SendMessage
 
-private var s_PrisonRules : PrisonRules;
+private var s_PrisonRules : PrisonRules; //script of game rules
 
-private var addedPower = 300; //TODO: variable
-//private var vError : int; //for aim. TODO
+private var addedPower = 0.4; //300 //TODO: variable
+//private var vError : int; //the error for aim. TODO
 //private var hError : int;
 
 private var timeToMovePosition = 4.0;
 private var changingAction = false;
 
 var thinkTime = 3.0; //time to think: before throw,etc. TODO: maybe set different times by actions
-var actionTime = 7.0;
-var actionDistance = 6.0; //TODO: maybe set different distance by actions
+var actionTime = 6.0;
+var actionDistance = 7.0; //TODO: maybe set different distance by actions
 
 private var toDisable = false; //break the main loop when disable this script
 
+//private var limitCollision = false; //if has collided with the invisible limits of ground
 //var drawLineToTarget = false; //TODO: if true will create a line to see direction to target
 
 
@@ -83,7 +93,7 @@ function MainLoop() { //loop that simulates Update() function with a yield in ea
 		var offset = transform.position - target.position;
 	
 		if (!changingAction) {
-			if (offset.magnitude < actionDistance) { //si el objetivo esta en un radio
+			if (offset.magnitude < actionDistance) { //if the target is close enough, in a certain distance radius 
 				switch (action) {
 				case DEFEND:
 					//TODO: dependiendo de situacion, de nivel de dificultad, etc, tendra un comportamiento diferente
@@ -101,108 +111,100 @@ function MainLoop() { //loop that simulates Update() function with a yield in ea
 					yield Idle();
 				} //switch
 				
-			} //en rango
+			} //if radio
 			else
 				yield Idle();	
-		} //changing
+		} //if changing
 		
-		//s_PlayerMove.UpdateMove(0, 0, false, false, true); //yield s_PlayerMove.WaitIdle(thinkTime);
-		//print("Fin action");
 		yield;
 	}
 }
 
+//TODO:
+function Update() {
 
-function OnEnable() {
-	SendMessage("SetForwardTransform", gameObject.transform);
-	toDisable = false;
-	MainLoop();
+	//switch()
+	
+	//s_PlayerMove.UpdateRotateTo(target.position, 3);
+	//if (!limitCollision)
+		//s_PlayerMove.UpdateMoveTo(target.position, 3);
 }
 
-function OnDisable() {
+function OnEnable() { //when enable = true, starts the main loop again
+	SendMessage("SetForwardTransform", gameObject.transform);
+	toDisable = false;
+	//MainLoop();
+}
+
+function OnDisable() { //when this.enable = false, the main loop will be finished: change player control. wait for receive OneEnable message to start again
 	toDisable = true;
 }
 
-/*function Update() {
-	s_PlayerMove.UpdateMove(0, 0, false, false); //print("SetDefend finish of player " + GetComponent(BallPlayer).GetPlayerID());
-}*/
 
 function ResetAction() {
 	CancelInvoke(); 
 	StopAllCoroutines();
 }
 
-function SetDefend() { //pone en posicion de defensa cuando en IAPlayerBall.js tira pelota
+function SetDefend() { //set to defense position. for example, when this player throws the ball
 	changingAction = true;
 	//ResetAction();
 	target = GameObject.FindWithTag("Ball").transform; //interesting use Find to take a bit latency: is normal in a person
 	action = DEFEND;
 	//yield s_PlayerMove.MoveToDefault(-1); //timeToMovePosition);
-	//s_PlayerMove.UpdateMove(0, 0, false, false, true); //print("SetDefend finish of player " + GetComponent(BallPlayer).GetPlayerID());
 	changingAction = false;
 }
 
-function SetHelp() { //pone en posicion de defensa cuando en IAPlayerBall.js tira pelota
-	//print("Set Help");
+function SetHelp() { //set to help position: colaborate with his partner who has the ball
 	changingAction = true;
-	//ResetAction();
 	target = GameObject.FindWithTag("Ball").transform; //XXX: maybe other target
 	action = HELP;
-	//yield s_PlayerMove.MoveToDefault(-1); //(timeToMovePosition); //SendMessage("MoveToDefault", timeToMovePosition); //yield WaitForSeconds(timeToMovePosition + 2);;
-	//s_PlayerMove.UpdateMove(0, 0, false, false, true);//print("SetHelp finish of player " + GetComponent(BallPlayer).GetPlayerID());
 	changingAction = false;
 }
 
-function SetAttack() { //pone en posicion de ataque cuando en IAPlayerBall.js coge pelota
+function SetAttack() { //when the player catches the ball (and no controlled by gamer), set to attack position. he'll try to burn an opponent
 	changingAction = true;
-	//ResetAction();
-	action = ATTACK; //the selection of target in attack mode will change every time in the main loop
-	//yield s_PlayerMove.MoveToDefault(-1); //(timeToMovePosition);
-	//s_PlayerMove.UpdateMove(0, 0, false, false, true);
+	action = ATTACK; //the selection of target in attack mode will change every time in the main loop (SelectPlayerToAttack())
+	
+	//test:
+	/*print("Set atttackkkk");	
+	target = GameObject.Find("/LerpzPlayer(Clone)1").transform; //SelectPlayerToAttack();
+
+	yield WaitForSeconds(2);
+	var direction = target.position - transform.position; //heading vector
+	direction = direction / direction.magnitude; //final direction = heading / distance
+	print("direction = " + direction);
+	yield s_PlayerBall.TryThrowBall(direction, addedPower); //if catch the ball, will wait more, to avoid to catch ball itself.*/
+	
+	changingAction = false;
+}
+
+function SetIdle() { //set as idle, without actions
+	changingAction = true;
+	action = ATTACK;
 	changingAction = false;
 }
 
 
-function SelectPlayerToAttack() {
-	target = GameObject.FindWithTag("Player").transform;
+function SelectPlayerToAttack() { //TODO: maybe in the script of group of IAPlayers
+	//target = GameObject.FindWithTag("Player").transform;
+	target = GameObject.Find("/LerpzPlayer(Clone)1").transform;
 	yield;
 	//if (s_PlayerBall.GetTeam()
 	//target = s_PrisonRules.NearestPlayer(s_PlayerBall.GetPlayerID(), -1, 2).transform;
 }
 
 function RotateToTarget() { //maybe only use for debug
-	yield s_PlayerMove.RotateTo(target.position, 10.0, timeToMovePosition);
+	yield s_PlayerMove.RotateTo(target.position, 10.0); //TODO: timeToMovePosition);
 }
 
-function IA_TryStealBall() { // loop 
-	/*var angle : float = 180.0;
-	var time : float = 0.0;
-	var move : float;
-	
-	animation.CrossFade("walk");
-	
-	// XXX: cambiar a transform.LookAt(target)
-	while (angle > 5 || time < attackTurnTime) { //rotar hacia target. TODO: sustituir por BallPlayer.MoveTo()
-		time += Time.deltaTime;
-		angle = Mathf.Abs(RotateTowardsPosition(target.position, rotateSpeed));
-		move = Mathf.Clamp01((90 - angle) / 90);
-		
-		// depending on the angle, start moving
-		animation["walk"].weight = animation["walk"].speed = move;
-		//direction = transform.TransformDirection(Vector3.forward * attackSpeed * move);
-		//characterController.SimpleMove(direction);
-		
-		yield;
-	}
-	*/
+function IA_TryStealBall() { //a specific behaviour of defend position: try steal the ball when the opponent throws the ball. useful to burn the thrower.
 	
 	/*if (s_PlayerBall.HasBall()) { //TODO: maybe don't require to check because he's attacking!!
 		yield WaitForSeconds(actionTime); //nothing, only wait
 		return;
 	}*/
 	
-	
-	//TODO: resolver error: cuando se brila a jugador de su mismo equipo. lo coge este en vez del brilado.
 	//TODO: the method of move player should be more complex: see the trayectory, distance, power, etc.
 	
 	//yield s_PlayerMove.RotateTo(target.position, 3.0, timeToMovePosition);
@@ -237,7 +239,7 @@ function IA_TryStealBall() { // loop
 }
 
 
-function IA_TryEscape() {
+function IA_TryEscape() { //a specific behaviour of defend position: try scape from the ball. useful to avoid being burned by the thrower opponent.
 	/*var angle : float = 180.0;
 	var time : float = 0.0;
 	var move : float;
@@ -264,12 +266,12 @@ function IA_TryEscape() {
 }
 
 
-function IA_TryBurn() {
+function IA_TryBurn() { //the most usual behaviour of attack position: try burn an opponent.
 	/*if (!s_PlayerBall.HasBall()) { //TODO: maybe don't require to check because he's attacking!!
 		yield WaitForSeconds(actionTime); //nothing, only wait
 		return;
 	}*/ 
-	print("IA_tryBurn");
+	var direction : Vector3;
 	
 	var time = 0.0;
 	var startTime = 0.0;
@@ -284,10 +286,9 @@ function IA_TryBurn() {
 		//TODO: MoveTo with limited time a position near of target: attackDistance or limit of his area
 		yield WaitForSeconds(thinkTime / 2.0); //XXX: maybe set a specified time variable to attack
 		
-		//TODO: gameObject.GetComponent(BallPlayer).AimBall(v, h);
-		//yield AimBall(0.5, 0.5); //TODO: apuntar con la pelota
 		//TODO: if target enough near
-		yield s_PlayerBall.TryThrowBall(Vector3(0.5, 0.5, 0), addedPower); //if catch the ball, will wait more, to avoid to catch ball itself.
+		direction = (target.position - gameObject.transform.position).normalized;
+		yield s_PlayerBall.TryThrowBall(direction, addedPower); //if catch the ball, will wait more, to avoid to catch ball itself.
 		//TODO: change power. 
 		
 		time += (System.DateTime.Now.Second - startTime);
@@ -297,14 +298,14 @@ function IA_TryBurn() {
 }
 
 
-function IA_Help() {
-	//s_PlayerMove.UpdateMove(0, 0, false, false);
+//TODO: function IA_PassBall() //a less usual behaviour of attack position: pass ball to a partner. useful to deceive opponents and burn someone of then easier
+
+function IA_Help() { //in help position: a colaborative behaviour. TODO: by now it's only idle.
 	yield; // WaitForSeconds(actionTime); //TODO time. ResetAction will stop this function when change kind of action
 	//yield s_PlayerMove.WaitIdle(actionTime);
 }
 
-function Idle() {
-	//s_PlayerMove.UpdateMove(0, 0, false, false);
+function Idle() { //no actions
 	yield;
 	//yield s_PlayerMove.WaitIdle(actionTime);
 }
@@ -315,6 +316,17 @@ function OnDrawGizmosSelected () {
 	Gizmos.DrawWireSphere(transform.position, actionDistance); //TODO: DrawLine
  }
 
+
+/*function OnCollisionEnter(col : Collision) {
+	print("OnCollisionEnter IAPlayer");
+	if ((col.collider.CompareTag("Limit")) ) {
+		print("IAPlayer collide with limit of ground");
+		limitCollision = true;
+		yield WaitForSeconds(2);
+		limitCollision = false;
+	}
+}*/
+		
 
 @script RequireComponent(PlayerBallController)
 @script RequireComponent(PlayerMoveController)
