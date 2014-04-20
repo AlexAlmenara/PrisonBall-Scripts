@@ -16,13 +16,14 @@ var lineOfSightMask : LayerMask = 0;
 private var isSnapping = false;
 private var headOffset = Vector3.zero;
 private var centerOffset = Vector3.zero;
-private var controller : PlayerController;
+private var controller : PlayerMoveController;
 private var velocity = Vector3.zero;
 private var targetHeight = 100000.0;
 
 private var targetOn = false;
 
-private var key_center = "Center";
+//private var key_center = "Center";
+private var center_input = false;
 
 function SetTarget(targ: Transform) { //the target sent from PrisonRules.js
 	target = targ;
@@ -38,7 +39,7 @@ function SetTarget(targ: Transform) { //the target sent from PrisonRules.js
 	
 	if (target)
 	{
-		controller = target.GetComponent(PlayerController);
+		controller = target.GetComponent(PlayerMoveController);
 	}
 	
 	if (!controller)
@@ -46,13 +47,16 @@ function SetTarget(targ: Transform) { //the target sent from PrisonRules.js
 }
 
 function Center() {
-	velocity = Vector3.zero;
-	isSnapping = true;
+	//velocity = Vector3.zero;
+	//isSnapping = true;
+	center_input = true;
+	yield; yield;
+	center_input = false;
 }
 
-function SetKeyCenter(key : String) {
+/*function SetKeyCenter(key : String) {
 	key_center = key;
-}
+}*/
 
 function LateUpdate () {
 	
@@ -78,7 +82,7 @@ function LateUpdate () {
 	
 	// We start snapping when user pressed Fire2!
 	//alex: called from message Center():
-	if (Input.GetButton(key_center) && (!isSnapping)) //modificado por mi. if (Input.GetButton("Fire2") && !isSnapping)
+	if (center_input && !isSnapping) //modificado por mi. if (Input.GetButton("Fire2") && !isSnapping)
 	{
 		velocity = Vector3.zero;
 		isSnapping = true;

@@ -18,6 +18,7 @@ var detectGestures = true;
 private var gestures1 : GameObject; //gestures detector of each player
 private var gestures2 : GameObject;
 
+private var s_PrisonHUD: PrisonHUD;
 
 //boolean AllUsersEngaged { get { return null != trackedUser1 && null != trackedUser2; } }
 function AllUsersEngaged() : boolean { 
@@ -29,6 +30,8 @@ function AllUsersEngaged() : boolean {
 
 
 function Awake() {
+	s_PrisonHUD = GameObject.FindGameObjectWithTag("PrisonRules").GetComponent(PrisonHUD);
+
 	//creation of nullPlayers
 	nullPlayer1 = Instantiate(nullPlayerPrefab) as GameObject; //don't worry about position and rotation, they are invisible
 	nullPlayer1.transform.parent = transform;
@@ -38,20 +41,22 @@ function Awake() {
 	
 	if (player1 == null)
 		player1 = nullPlayer1;
-	else
-		player1.SendMessage("Disappear"); //objects starts without rendering
+		
+	player1.SendMessage("Disappear"); //objects starts without rendering
 	
 	if (player2 == null)
 		player2 = nullPlayer2;
-	else
-		player2.SendMessage("Disappear"); //XXX: or SendMessage("Stop");
+		
+	player2.SendMessage("Disappear"); //XXX: or SendMessage("Stop");
 	
 	if (detectGestures) {
 		gestures1 = new GameObject("KinectGestures1");
 		gestures1.AddComponent(KinectGesturesDetector);
 		gestures1.AddComponent(KinectGesturesHandler);
 		gestures1.SendMessage("SetPlayer", player1); //set gameObject in KinectGesturesHandler
+		gestures1.SendMessage("SetGamer", 1);
 		gestures1.transform.parent = transform;
+		gestures1.transform.position = transform.position;
 		DisableDetectGestures(1);
 		
 		if (nUsers == 2) {
@@ -59,12 +64,13 @@ function Awake() {
 			gestures2.AddComponent(KinectGesturesDetector);
 			gestures2.AddComponent(KinectGesturesHandler);
 			gestures2.SendMessage("SetPlayer", player2);
+			gestures2.SendMessage("SetGamer", 2);
 			gestures2.transform.parent = transform;
+			gestures2.transform.position = transform.position;
 			DisableDetectGestures(2);
 		}
 	}
 	
-	print("End of Awake Engage Users");
 }
 	
 	
@@ -82,6 +88,7 @@ function SetNumberUsers(n : int) {
 		gestures2.AddComponent(KinectGesturesDetector);
 		gestures2.AddComponent(KinectGesturesHandler);
 		gestures2.SendMessage("SetPlayer", player2);
+		gestures2.SendMessage("SetGamer", 2);
 		gestures2.transform.parent = transform;
 		DisableDetectGestures(2);
 	}
@@ -108,7 +115,7 @@ function OnChangePlayer1(player : GameObject) { //change the listener gameobject
 	else
 		player.SendMessage("Disappear"); 
 	
-	gestures1.SendMessage("SetPlayer", player);
+	gestures1.SendMessage("SetPlayer", player); //message to KinectGestureDetector and KinectGestureHandler
 	player1 = player;
 }
 
@@ -185,6 +192,7 @@ function Zig_UserFound(user : ZigTrackedUser) {
 			gestures1.SendMessage("OnUserAttach", user);
 		}
         print("User 1 engaged"); //SendMessage("User1Engaged", this, SendMessageOptions.DontRequireReceiver);
+        s_PrisonHUD.OnKinectUserFound(1);
     }
 	else
 	if ((null == trackedUser2) && (nUsers == 2)) { //user 2
@@ -197,6 +205,9 @@ function Zig_UserFound(user : ZigTrackedUser) {
 			gestures2.SendMessage("OnUserAttach", user);
 		}
         print("User 2 engaged"); //SendMessage("User2Engaged", this, SendMessageOptions.DontRequireReceiver);
+        
+        if (nUsers == 2)
+        	s_PrisonHUD.OnKinectUserLost(2);
    }
 	
     if (!areTheyEngaged && AllUsersEngaged()) {
@@ -215,7 +226,7 @@ function Zig_UserLost(user : ZigTrackedUser) {
 			DisableDetectGestures(1);
 		}
         print("User 1 disengaged"); //SendMessage("User1Disengaged", this, SendMessageOptions.DontRequireReceiver);
-        //TODO: prisonHUD.SendMessage("OnKinectUserLost", 1);
+        s_PrisonHUD.OnKinectUserLost(1);
 		//TODO: SendMessage to PrisonRules to stop the game
     }
     if (user == trackedUser2) { //don't need to check if (nUsers == 2)
@@ -228,10 +239,10 @@ function Zig_UserLost(user : ZigTrackedUser) {
 		}
         print("User 2 disengaged");  //SendMessage("User2Disengaged", this, SendMessageOptions.DontRequireReceiver);
         
-        /*if (nUsers == 2) {
-        	//TODO: prisonHUD.SendMessage("OnKinectUserLost", 2);
+        if (nUsers == 2) {
+        	s_PrisonHUD.OnKinectUserLost(2);
         	//TODO: SendMessage to PrisonRules to stop the game
-        }*/
+        }
     }
 }
 

@@ -1,15 +1,22 @@
+#pragma strict
 
 private var litAmount = 0.00;
 
+var jetSound : AudioClip;
+
 function Start () { //TODO: if (hasIA) y que se active con OnEnabled()
 
-	var playerController : PlayerController = GetComponent(PlayerController);
+	var playerMoveController : PlayerMoveController = GetComponent(PlayerMoveController);
 	
 	// The script ensures an AudioSource component is always attached.
 	
 	// First, we make sure the AudioSource component is initialized correctly:
-	audio.loop = false;
-	audio.Stop();
+	if (audio.clip) {
+		audio.loop = false;
+		audio.Stop();
+	}
+	/*else
+		Debug.LogWarning("No audio source attached for player");*/
 	
 	
 	// Init the particles to not emit and switch off the spotlights:
@@ -17,34 +24,27 @@ function Start () { //TODO: if (hasIA) y que se active con OnEnabled()
 	var childLight : Light = GetComponentInChildren(Light);
 	
 	for (var p : ParticleEmitter in particles)
-	{
 		p.emit = false;
-	}
+
 	childLight.enabled = false;
 
 	// Once every frame  update particle emission and lights
-	while (true)
-	{
-		var isFlying = playerController.IsJumping();
+	while (true) {
+	
+		var isFlying = playerMoveController.IsJumping();
 				
-		// handle thruster sound effect
-		if (isFlying)
-		{
-			if (!audio.isPlaying)
-			{
-				audio.Play();
+		if (audio.clip) { // handle thruster sound effect
+			if (isFlying) {
+				if (!audio.isPlaying)
+					audio.Play();
+			}
+			else{
+				audio.Stop();
 			}
 		}
-		else
-		{
-			audio.Stop();
-		}
-		
 		
 		for (var p : ParticleEmitter in particles)
-		{
 			p.emit = isFlying;
-		}
 		
 		if(isFlying)
 			litAmount = Mathf.Clamp01(litAmount + Time.deltaTime * 2);

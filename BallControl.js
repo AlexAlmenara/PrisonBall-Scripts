@@ -15,8 +15,7 @@ private var wasOut = false; //if touch the invisible planes: out from the ground
 private var groundC: GroundControl; //type Script, that controls the dimensions of the ground and has the getArea() function
 private var s_PrisonRules : PrisonRules;
 
-function Start ()
-{
+function Start () {
 	// do we exist in the level or are we instantiated by an enemy dying?
 	//mover = GetComponent(DroppableMover);
 	//Physics.IgnoreCollision(gameObject.collider, GameObject.Find("Terrain").collider);
@@ -46,11 +45,14 @@ function IsGrounded() {
 }
 
 
-function SetCaught(state: System.Boolean) { //pone a true o false si esta cogida por personaje
+function SetCaught(state: boolean) { //set true or false if ball is caught by a player
 	SetPhysics(!state); 
 	caught = state;
-	grounded = false; //catch the ball cancels the grounded state
-	wasOut = false;
+	
+	if (state) { //catch the ball cancels the grounded state
+		grounded = false;
+		wasOut = false;
+	}
 }
 
 function IsCaught() { //devuelve si esta cogida
@@ -62,13 +64,9 @@ function GetArea() {
 	return groundC.GetArea(transform.position);
 }
 
-//se aplica fuerza a la pelota para ser tirada con una fuerza y una direccion
-function Throw(power : int, direction : Vector3) {
-	//gameObject.GetComponent(Transform).Translate(Vector3.up * 5);
-	//gameObject.rigidbody.AddForce(x * power, y * power, z * power);
-	//gameObject.rigidbody.AddForce(Vector3.forward * power);
+//add force to the ball for be thrown with a specified power and direction
+function Throw(power : float, direction : Vector3) {
 	gameObject.rigidbody.AddForce(direction * power);
-	//collider.isTrigger = false;
 }
 
 function IMoveTo(pos: Vector3) { //instant move to posicion. if any force, quit it
@@ -79,7 +77,7 @@ function IMoveTo(pos: Vector3) { //instant move to posicion. if any force, quit 
 
 
 //activa/desactiva la fisica de la pelota, es decir, si le afecta la gravedad etc. util para que el personaje suba la pelota.
-function SetPhysics(state: System.Boolean) {
+function SetPhysics(state: boolean) {
 	this.rigidbody.isKinematic = !state;
 }
 
@@ -141,21 +139,19 @@ function OnCollisionEnter(col: Collision) { //if ball touches the terrain or the
 		s_PrisonRules.OnBallGroundedOrOut();
 	}*/
 	
-	//print("Ball: OnCollisionEnter");
+	print("Ball: OnCollisionEnter. wasOut = " + wasOut + ", grounded = " + grounded + ", caught = " + caught + ", collider.tag = " + col.collider.tag);
 	
-	//if (!catched)	: maybe not enough time to see correctly !catched after thrown
+	//if (!caught)	: maybe not enough time to see correctly !catched after thrown
 	//note that if someone is being burning PrisonRules.js will decide to do nothing
 	
 	if (!wasOut) // for not to send a lot of this messages
-		if (col.collider.CompareTag("Plane1")) {
-			//print("Ball collide with invisible Plane1");
+		if (col.collider.CompareTag("Plane1")) { //Ball collide with invisible Plane1
 			grounded = true;
 			wasOut = true;
 			s_PrisonRules.OnBallOut1();
 		}
 		else
-		if (col.collider.CompareTag("Plane2")) {
-			//print("Ball collide with invisible Plane2");
+		if (col.collider.CompareTag("Plane2")) { //Ball collide with invisible Plane2;
 			grounded = true;
 			wasOut = true;
 			s_PrisonRules.OnBallOut2();
@@ -163,8 +159,7 @@ function OnCollisionEnter(col: Collision) { //if ball touches the terrain or the
 	
 	else 
 	if (!grounded) 
-		if (col.collider.CompareTag("Terrain")) {
-			//print("Ball collide with Terrain");
+		if (col.collider.CompareTag("Terrain")) { //Ball collide with Terrain
 			grounded = true; 
 			s_PrisonRules.OnBallGrounded();
 		}

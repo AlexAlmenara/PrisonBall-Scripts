@@ -32,6 +32,7 @@ var camera2: GameObject;
 
 
 var teamColouring = true;
+var showGamerIndicator = false;
 
 var groundSound: AudioClip;
 var burnSound : AudioClip;
@@ -42,8 +43,8 @@ var endSound : AudioClip;
 private var s_groundC: GroundControl; //type Script, that controls the dimensions of the ground and has the getArea() function
 private var s_PrisonHUD: PrisonHUD;
 
-private var nBurned1 = 0; //numero de brilados del equipo 1
-private var nBurned2 = 0; //numero de brilados del equipo 2
+private var nBurned1 = 0; //number of burned player of team 1
+private var nBurned2 = 0; // of team 2
 
 
 private var turn = 1; //turn de equipo. 1 = equipo1, 2 = equipo2
@@ -52,15 +53,18 @@ private var ownerID = NOPLAYER; //current player who has the ball
 private var personTouched = NOPLAYER; //id de jugador si ha sido tocado por pelota. 0: ninguno tocado (se pone a 0 cuando alguien coge pelota)
 private var personThrow = NOPLAYER; //id of last player who has thrown the ball
 private var burningID = NOPLAYER; //player who is burning
+private var ballGrounded = false; //if ball touches the ground. note that it's a different that ball.GetComponent(BallControl).grounded
 
 //stopGame = private var movingToNewPosition = false; //if someone is moving to a new position (burned or revived): nobody can do anything
-var timeToMovePosition = 5.0; //time to move to a new position (a player is burned or revived)
+var timeToPosition = 5.0; //time to move to a new position (a player is burned or revived)
+var runToPosition = true; //if the players auto-move to the new positions running or not
 var timeGrounded = 2.0; //time to wait after touch terrain or planes. time to return to another player. for see how ball touches the ground (more realistic)
 
 /* vector de jugadores. el identificador de cada jugador sera el indice en el que esta
   jugador i de equipo 1: identificador i
   jugador i de equipo 2: identificador nPlayersTeam + i */
 private var players : GameObject []; // estatico [] es mucho mas eficiente que Array();
+private var playerNames : String [];
 //var players = new GameObject [nPlayersTeam*2];
 //XXX: private var ss_BallPlayer = new Array(); //scripts BallPlayer for all players
 
@@ -79,11 +83,10 @@ var prefabPlayer: GameObject;
 private var gplayerID1 : int = NOPLAYER; //XXX: identifies the players controlled by the gamers
 private var gplayerID2 : int = NOPLAYER;
 
-var firstPlayer = 1; //playerID who starts the game. note: must be of team 1 for work properly
-private var lastGamer = firstPlayer; //in the rare case of two gamers in the team 1: alternate between them. in the case of receive from an opponent the decision will be 
+private var lastGamer = 1; //in the rare case of two gamers in the team 1: alternate between them. in the case of receive from an opponent the decision will be 
 //var initPosBall : Vector3; //default position of the ball: near of player 0. is public for communicate with BallControl.js
 
-
+private var debugMovingPos: Vector3;
 
 function PassiveStart() { //this Start function is only called as a message by GroundControl after UpdateDimensions() of ground
 	transform.position = GameObject.FindWithTag("Ground").transform.position; //rules in the same position of ground
@@ -107,15 +110,26 @@ function PassiveStart() { //this Start function is only called as a message by G
 	nControlled1 = GameObject.Find("ModeCamera").GetComponent(ModeMenuGUI).nControlled1; //it's guaranteed the allowed combinations: (0, 1), (1, 1), (2, 0)
 	nControlled2 = GameObject.Find("ModeCamera").GetComponent(ModeMenuGUI).nControlled2; //is necessary to call Find repeatdly because we cannot have a variable of script ModeMenuGUI
 	//XXX: kinect, fifa, last oportunity*/
-	if (kinect) {
+	var zigfu = GameObject.FindWithTag("ZigFu");
+	
+	if (kinect) {	
+		s_PrisonHUD.SetKinectMessages(true);
+		zigfu.SetActive(true);
 		if (OneGamer())
-			GameObject.FindWithTag("ZigFu").SendMessage("SetNumberUsers", 1);
+			zigfu.SendMessage("SetNumberUsers", 1);
 		else
-			GameObject.FindWithTag("ZigFu").SendMessage("SetNumberUsers", 2);
+			zigfu.SendMessage("SetNumberUsers", 2);
 	}
+	else {
+		s_PrisonHUD.SetKinectMessages(false);
+		zigfu.SetActive(false);
+	}
+	
+	if (OneGamer())
+		s_PrisonHUD.SplitScreen(false);
 	else
-		GameObject.FindWithTag("ZigFu").SetActive(false);
-		
+		s_PrisonHUD.SplitScreen(true);
+			
 	yield;
 	
 	CreatePlayers(); // is called in GroundControl.js after set the initial dimensions of the ground
@@ -126,40 +140,57 @@ function PassiveStart() { //this Start function is only called as a message by G
 
 
 function CreatePlayers() { //create player and set its location in the ground
+	//******* initial restrictions ******************************
 	if ((nPlayersTeam <= 0) || (nPlayersTeam > MAX_NPLAYERS_TEAM)) //controlar que no se pase del limite de jugadores
 		nPlayersTeam = DEFAULT_NPLAYERS_TEAM;
+		
+	//nControlled1 (1 or 2) and nControlled2 (0 or 1) are guaranteed correctly in ModeMenuGUI.js
+	if (nControlled1 == nPlayersTeam)
+		fifa = false; //don't need to use switch of controls
 	
+	if (nPlayersTeam == 1) //if only one player per team, it's impossible to set two gamers in team 1  
+		nControlled1 = 1;
+			
+			
+	//******* creation of players *******************************
 	var defPos: Vector3; //default position of each player
 	var defRot: Quaternion = Quaternion.identity; //for team 1, no rotation
 	//var render : Renderer; //renderer of each player
 	
 	players = new GameObject [nPlayersTeam*2]; //print ("nplayers = " + players.Length);
+	playerNames = new String [nPlayersTeam*2];
 	
 	for (var i=0; i<nPlayersTeam; i++) { //create team 1
 		defPos = s_groundC.GetPosition(s_groundC.GAME1, nPlayersTeam, i);
-		defPos.y = 3; //TODO: Carl fall down
+		//defPos.y = 2; //TODO: Carl fall down
 		players[i] = Instantiate(prefabPlayer, defPos, defRot); //create player. //by default IAPlayer with help position
 		players[i].SendMessage("SetDefaultPosition", defPos); 
 		players[i].SendMessage("SetDefaultRotation", defRot);
 		players[i].SendMessage("SetPlayerID", i); 
-		players[i].SendMessage("SetName", "player"+i);
+		playerNames[i] = "player"+i;
+		players[i].SendMessage("SetName", playerNames[i]);
 		players[i].SendMessage("SetTeam", 1);
 		
 		if (teamColouring)
 			for (var rend : Renderer in players[i].GetComponentsInChildren(Renderer)) //render = players[i].transform.Find("rootJoint").renderer;
 				rend.material.color = Color.blue;
-	}
 		
-	defRot = Quaternion(0, 1, 0, 0); //for team 2, rotation for see against the team 1. players[i+nPlayersTeam].transform.Rotate(Vector3.up, 180);
+		if (showGamerIndicator)
+			players[i].SendMessage("SetGamerIndicatorOption", true); //else: by default is false
+			
+	} //for
+		
+	defRot = Quaternion.Euler(0, 180, 0); //for team 2, rotation for see against the team 1. players[i+nPlayersTeam].transform.Rotate(Vector3.up, 180);
 	for (i=nPlayersTeam; i<nPlayersTeam*2; i++) { //create team 2
 		defPos = s_groundC.GetPosition(s_groundC.GAME2, nPlayersTeam, i-nPlayersTeam);
-		defPos.y = 3;
+		//defPos.y = 2;
 		players[i] = Instantiate(prefabPlayer, defPos, defRot);
 		players[i].SendMessage("SetDefend"); //team 2 starts defending because team 1 starts attacking
 		players[i].SendMessage("SetDefaultPosition", defPos);
 		players[i].SendMessage("SetDefaultRotation", defRot);
 		players[i].SendMessage("SetPlayerID", i);
-		players[i].SendMessage("SetName", "player"+i);
+		playerNames[i] = "player"+i;
+		players[i].SendMessage("SetName", playerNames[i]);
 		players[i].SendMessage("SetTeam", 2);
 		
 		
@@ -175,6 +206,9 @@ function CreatePlayers() { //create player and set its location in the ground
 		if (teamColouring)
 			for (var rend : Renderer in players[i].GetComponentsInChildren(Renderer)) //render = players[i].transform.Find("rootJoint").renderer;
 				rend.material.color = Color.red;	
+				
+		if (showGamerIndicator)
+			players[i].SendMessage("SetGamerIndicatorOption", true); //else: by default is false
 	}
 	
 	
@@ -182,18 +216,24 @@ function CreatePlayers() { //create player and set its location in the ground
 	for (i=0; i<nPlayersTeam*2; i++)
 		burned[i] = false; //by default all player are not burned
 	
-	yield; //we need to wait for finish creation of IAPlayers
+	/*camera1.SendMessage("SetTarget", players[firstPlayer]); //although players not prepared we can set cameras while waiting
+	if (!OneGamer())
+		camera2.SendMessage("SetTarget", players[nPlayersTeam]);*/
+	
+	//yield WaitForSeconds(3.0); //we need to wait for finish preparation of IAPlayers
+	
+	
+	//************************** set gamers ***************************************
+	//TODO: until here only we see the screen "Loading...". right now we can show the ground
 	
 	//Set the initial controls of players
+	var firstPlayer : int = Mathf.FloorToInt(nPlayersTeam / 2.0); //playerID who starts the game
+	
 	SetGamer(firstPlayer, 1); //at the beginning, the player 0 is controlled by the gamer 1
-	
-	//nControlled1 (1 or 2) and nControlled2 (0 or 1) are guaranteed correctly in ModeMenuGUI.js
-	if (nControlled1 == nPlayersTeam)
-		fifa = false; //don't need to use switch of controls
-	
+		
 	//second player controlled
 	if (nControlled1 == 2)
-		SetGamer(1, 2); //player 1 controlled by the gamer 2
+		SetGamer(firstPlayer + 1, 2); //player 1 controlled by the gamer 2
 	else if (nControlled2 == 1)
 		SetGamer(nPlayersTeam, 2); //first player of second team controlled by gamer 2
 	else { //only one gamer
@@ -204,6 +244,7 @@ function CreatePlayers() { //create player and set its location in the ground
 
 	//var initPosBall = BallPositionToPlayer(0);
 	//ball.SendMessage("ShowBall", initPosBall);
+	
 	/*yield WaitForSeconds(2); //XXX
 	BallToPlayer(firstPlayer); //ownerID = 0. at the beginning don't need to call _NonSecure or _Quit
 	s_PrisonHUD.OnTurnChanged(1); //no need call UpdateTurn(0)*/
@@ -215,22 +256,24 @@ function CreatePlayers() { //create player and set its location in the ground
 	camera1.SendMessage("SetTarget", carl.transform);*/
 }
 
-function BallToPlayer_NonSecure(playerID: int) { //if nobody has the ball, auto catch it
+/*function BallToPlayer_NonSecure(playerID: int) { //if nobody has the ball, auto catch it
+	yield WaitForSeconds(1); //wait if ownerID variable is not updated yet
 	if ((ownerID != NOPLAYER) || (playerID == NOPLAYER)) { //if someone has the ball or player invalid, do nothing.
 		print("No could pass ball to player " + playerID);
 		return;
 	}
 	
 	yield BallToPlayer(playerID);
-}
+}*/
 
 function BallToPlayer_Quit(playerID: int) { //auto catch the ball. if someone has the ball quit it before
 	if (playerID == NOPLAYER) //if player invalid, do nothing
 		return;
 		
-	if (ownerID != NOPLAYER) //ball.GetComponent(BallControl).IsCaught()
+	if ((ownerID != NOPLAYER) && (ownerID != playerID)) { //ball.GetComponent(BallControl).IsCaught()
 		players[ownerID].SendMessage("QuitBall"); //if someone has the ball, quit it. the phsysics of ball remains desactivated 
-	
+	}
+		
 	yield BallToPlayer(playerID);
 }
 
@@ -239,38 +282,41 @@ function BallToPlayer(playerID: int) { //auto catch the ball. it's a low level f
 	ball.SendMessage("IMoveTo", BallPositionToPlayer(playerID));
 	yield WaitForSeconds(2.0); //XXX
 	players[playerID].SendMessage("CatchBall"); //el jugador coge la pelota automaticamente. XXX: be sure!! XXX 2: maybe put this line outside
-	//XXX: on OnBallCatched(): set of camera and set controller
-	yield;
 }
 
 
 
 function OnBallCatched(playerID: int) { //se activa cuando alguien cogio pelota
-	print("OnBallCatched: " + playerID);
+	//print("OnBallCatched: player " + playerID);
 	if (playerID == NOPLAYER)
 		return;
 		
 	ownerID = playerID; //now he's the current owner of the ball
-	yield UpdateTurn(playerID);
-	//print("Player " + playerID + " has caught the ball"); 	
-	print("Onballcatched: personThrow = " + personThrow);
+	print("Onballcatched player = " + playerID + " and personThrow was = " + personThrow);
+	yield UpdateTurn(playerID);	
+	
+	//************** 1) check if we can burn a player *************************************************
+	//rule: if someone throw ball and an opponent catch the ball, burn the thrower. also we have to check if no current burning
+	if (CheckBurnThrowPlayer(playerID, personThrow)) //((personThrow != NOPLAYER) && (PlayerTeam(personThrow) != PlayerTeam(playerID)) && (burningID == NOPLAYER))
+		BurnPassPlayer(personThrow); //TODO: or BurnNoPass //if burn ok, the code below will be ejecuted before finish burning because burning is slow
 		
-	//****** !fifa ********************************* 
+	//TODO: si toca el suelo antes de ser atrapada, entonces no burn. ademas, el checkBurn debe ser diferente: personThrow si es el mismo que el que brilar
+	//************** 2) update actions of IAPlayers and if fifa option is activated, change control to a gamer **************
+	
+	//****** !fifa : gamers are always the same players ********************************* 
 	if (!fifa) { //if has not set the FIFA behavour the players controlled are always the same	
-		print("OnBallCatched NO FIFA");
 		if ((turnChanged) || (burningID != NOPLAYER))
 			UpdateAllIActions();
 		else
 			UpdateIActions(personThrow, playerID);
 			
 		turnChanged = false;
-		Clear_Touch_Throw();
+		ClearFlags();
 		return;
 	}
 	
 	
-	//***** fifa *************************************
-	print("OnBallCatched FIFA");
+	//***** fifa : the player who has caught the ball will be a gamer *************************************
 	// Person who caught the ball: change the control of gamer
 	if (OneGamer()) { //only ONE gamer and if the playerID is a different player to set to the gamer
 	
@@ -279,7 +325,7 @@ function OnBallCatched(playerID: int) { //se activa cuando alguien cogio pelota
 		//UpdateIActions: else if (PlayerTeam(playerID) == 2) players[playerID].SendMessage("SetAttack");
 	}
 	else 
-	if ((nControlled1 == 1) && (nControlled2 == 1)) { //1 VS 1
+	if (GamerVersusGamer()) { //1 VS 1
 		if (PlayerTeam(playerID) == 1)
 			UpdateGamer(playerID, 1);	
 		else //team 2
@@ -287,35 +333,40 @@ function OnBallCatched(playerID: int) { //se activa cuando alguien cogio pelota
 		
 	}
 	else { //TWO gamers in team 1: nControlled1 == 2, nControlled2 == 0
-		if (PlayerTeam(playerID) == 1) { // XXX: y si vuelve a un mismo gamer de antes??
+		if (PlayerTeam(playerID) == 1) {
 		
-			// in the rare case of two gamers in the team 1: alternate between gamers: decide who
-			var gamer : int;
-			if (personThrow == NOPLAYER)
-				gamer = lastGamer;
-			else
-			if (personThrow == gplayerID1) //gamer 1 pass ball to gamer 2
-				gamer = 2;
-			else
-			if (personThrow == gplayerID2) //gamer 2 pass ball to gamer 1
-				gamer = 1;
-			else //a gamer catch ball from an opponent or from out of the ground: decide who
-			if (lastGamer == 1)
-				gamer = 2;
-			else
-				gamer = 1;
-				
-			UpdateGamer(playerID, gamer);
-		
+			if (playerID == gplayerID1)  //if ball return to a pass gamer, no need to change gamer, only update last gamer
+				lastGamer = 1;
+			else if (playerID == gplayerID2)
+				lastGamer = 2;
+			else {
+			
+				var gamer : int; // alternate between gamers: decide who
+				if (personThrow == NOPLAYER)
+					gamer = OtherGamer(lastGamer); //return ball to the player that isn't the last with the ball
+				else
+				if (personThrow == gplayerID1) //gamer 1 pass ball to gamer 2
+					gamer = 2;
+				else
+				if (personThrow == gplayerID2) //gamer 2 pass ball to gamer 1
+					gamer = 1;
+				else //a gamer catch ball from an opponent or from out of the ground: decide who
+				if (lastGamer == 1)
+					gamer = 2;
+				else
+					gamer = 1;
+					
+				UpdateGamer(playerID, gamer); //lastGamer is updated inside
+			}
 		} //else players[playerID].SendMessage("SetAttack"); //team 2. this in: UpdateIActions():
 	}
 		
-	if ((turnChanged) || (burningID != NOPLAYER))
-		UpdateAllIActions();
+	if ((turnChanged) || (burningID != NOPLAYER)) //there's a change of action of IAPlayers, so update all
+ 		UpdateAllIActions();
 	else
 		UpdateIActions(personThrow, playerID); //after update control of playerID, update the control of the rest of players
 	turnChanged = false;
-	Clear_Touch_Throw();
+	ClearFlags();
 	yield;		
 }
 
@@ -336,7 +387,8 @@ function OnBallThrown(playerID: int) { //when a player throws the ball
 /* Cuando un jugador ha sido tocado, marca la situacion.
   Entonces, despues pueden suceder varias cosas:
   - Si la pelota toca el suelo se llamara a OnBallGrounded para brilar a jugador.
-  - Si un jugador toca la pelota, personTouched = id. */
+  - Si un jugador toca la pelota, personTouched = id. 
+  Send from PlayerBallController.OnCollisionEnter() */
 function OnPersonTouched(playerID: int) { 
 	if (playerID == NOPLAYER)
 		return;
@@ -352,17 +404,15 @@ function OnPersonTouched(playerID: int) {
 function OnBallGrounded()  {
 	if (burningID != NOPLAYER) //there's a player burning
 		return;
-		
-	//print("on ball grounded");
-	if (personTouched != NOPLAYER) { //si toco un jugador y luego pelota toco suelo: brilar jugador. burn player will be pass the ball to him
-		yield BurnPlayer(personTouched); //be sure to burn player before return the ball, so yield
-		//print("Finished Burn Player");
-		//ball.grounded = false; //esta variable no haria falta
+	
+	ballGrounded = true; //print("on ball grounded");
+	if (CheckBurnHitPlayer(personTouched, personThrow)) {
+		yield BurnPassPlayer(personTouched); //be sure to burn player before return the ball, so yield
 	}
 	else
 	// if the ball is out from the ground: this only can ocurr when the ball go beyond the invisible planes
 	//XXX: if (!stopGame)
-	if (ball.GetComponent(BallControl).isOut1())  //podria estar en Update(), pero asi es mas eficiente
+	if (ball.GetComponent(BallControl).isOut1())
 		yield BallToArea1();
 	else if (ball.GetComponent(BallControl).isOut2())
 		yield BallToArea2();
@@ -374,9 +424,9 @@ function OnBallOut1() { //when ball touch the invisible plane with tag Plane1 (o
 	if (burningID != NOPLAYER) //there's a player burning
 		return;
 	
-	//print("on ball out1");	
-	if (personTouched != NOPLAYER) { //si toco un jugador y luego pelota toco suelo: brilar jugador
-		yield BurnPlayer(personTouched); //be sure to burn player before return the ball, so yield
+	ballGrounded = true; //print("on ball out1");	
+	if (CheckBurnHitPlayer(personTouched, personThrow)) { //if someone was beated by the ball and then the ball touches the ground: burn player
+		yield BurnPassPlayer(personTouched); //be sure to burn player before return the ball, so yield. TODO: quit yield xDDDD
 		//print("Finished Burn Player");
 	}
 	else
@@ -387,11 +437,9 @@ function OnBallOut2() { //when ball touch the invisible plane with tag Plane2 (o
 	if (burningID != NOPLAYER) //there's a player burning
 		return;
 		
-	//print("on ball out2");
-	if (personTouched != NOPLAYER) { 
-		yield BurnPlayer(personTouched); //burn player will be pass the ball to him
-		//print("Finished Burn Player");
-	}
+	ballGrounded = true; //print("on ball out2");
+	if (CheckBurnHitPlayer(personTouched, personThrow)) //(personTouched != NOPLAYER)
+		yield BurnPassPlayer(personTouched); //burn player will be pass the ball to him
 	else
 		yield BallToArea2();
 }
@@ -399,8 +447,7 @@ function OnBallOut2() { //when ball touch the invisible plane with tag Plane2 (o
 
 
 function BallToArea1() { //return the ball to a player of the Area 1: GAME1 or BURNED2
-	print("pelota Out1");
-	//XXX: if (!fifa): return to last gamer if possible (see the area)
+	//TODO: if (!fifa): return to last gamer if possible (see the area)
 	
 	var playerID = 0; //by default return to first player of team 1: if there's no players burned of team 2 and player 0 is not burned 
 	var i : int;
@@ -420,14 +467,14 @@ function BallToArea1() { //return the ball to a player of the Area 1: GAME1 or B
 			}	
 	}
 	
-	s_PrisonHUD.OnBallOut(1, playerID);
+	print("Ball to Area 1, so return to " + playerID);	
+	s_PrisonHUD.OnBallOut(1, playerNames[playerID]);
 	yield WaitForSeconds(timeGrounded);
-	yield BallToPlayer_NonSecure(playerID);
+	yield BallToPlayer_Quit(playerID);
 }
 
 function BallToArea2() { //return the ball to a player of the Area 2: GAME2 or BURNED1
-	//XXX: if !fifa: better to the gamer
-	print("pelota Out2");
+	//TODO: if !fifa: better to the gamer
 	var playerID = nPlayersTeam; //by default return to first player of team 2: if there's no players burned of team 1 and player 'nPlayersteam' is not burned 
 	var i : int;
 	
@@ -445,39 +492,99 @@ function BallToArea2() { //return the ball to a player of the Area 2: GAME2 or B
 				break; //found first surviving player of team 2
 			}	
 	}
-		
-	s_PrisonHUD.OnBallOut(2, playerID);
+	
+	print("Ball to Area 2, so return to " + playerID);	
+	s_PrisonHUD.OnBallOut(2, playerNames[playerID]);
 	yield WaitForSeconds(timeGrounded);
-	yield BallToPlayer_NonSecure(playerID);
+	yield BallToPlayer_Quit(playerID);
 }
 
 
+/* Burn the player who was touched with the grounded ball. 
+   Then pass ball to burned player. all of this with the cameras in full screen to see the video
+   This function is called after check (personTouched != NOPLAYER) when ball is grounded */
+/*function BurnHitPlayer(playerID: int) { 
+	if (CheckBurnPlayer(playerID)) { //check if the playerID is correct
+		//print("check pass burning ok");
+		SpecialViewToPlayer(playerID);
+		yield BurnPlayer(playerID);
+		yield BallToPlayer_Quit(playerID);
+		RestoreCameras();
+	}
+}
 
-function BurnPlayer(playerID: int) { //burn a player. it's called in OnBallGrounded with yield for stop	
+
+ Burn the player who has thrown the ball after being caught by an opponent. 
+   Then pass ball to burned player. all of this with the cameras in full screen to see the video
+   This function is called after check (personTouched != NOPLAYER) when someone caught the ball
+function BurnThrowPlayer(playerID: int) { 
+	if (CheckBurnPlayer(playerID)) { //check if the playerID is correct
+		SpecialViewToPlayer(playerID);
+		yield BurnPlayer(playerID); 
+		yield BallToPlayer_Quit(playerID);
+		RestoreCameras();
+	}
+}*/
+	
+	
+//rule: if someone throws the ball and an opponent is hit: burn the the beaten player. 
+//note: no need to check ballGrounded because this function is called from OnBallGrounded or OnBallOut
+function CheckBurnHitPlayer(playerHit: int, playerThrow: int) : boolean { //check if we can burn the hit player	
 	//print("personThrow = " + personThrow + ", playerID = " + playerID);
-	if ((personThrow == NOPLAYER) || (playerID == NOPLAYER))
-		return;
+	if ((playerThrow == NOPLAYER) || (playerHit == NOPLAYER)) //if nobody was beaten or nobody has thrown the ball, no rule to burn
+		return false;
 	
-	personTouched = NOPLAYER; //reset variable: nobody touched again. XXX: be sure where reset	
-	print("Player " + personThrow + " hits to player " + playerID);
-	if (PlayerTeam(playerID) == PlayerTeam(personThrow)) { //if a person hits to a member of its own team: no burn
-		print("Hit to a member of its own team: no burn");
-		personThrow = NOPLAYER;
-		return;
-	}
-	
-	if (burned[playerID]) //if he was burned before, nothing. note that player.hasProtection and player.hasBall is checked in script BallPlayer.OnCollisionEnter()
-		return;
+	if ((burned[playerHit]) || (burningID != NOPLAYER)) //if player was burned before or someone is currently burning: no burn
+		return false; //note that player.hasProtection and player.hasBall is checked in script BallPlayer.OnCollisionEnter()
 		
-	print("burnPlayer ID = " + playerID);
-	burned[playerID] = true;
-	burningID = playerID;
-	
-	if (!HasIA(playerID)) { //need to be IA for move automatically. note that gPlayerID variable continues because gamer will be regain control
-		players[playerID].SendMessage("SetIAPlayer"); //TODO: maybe only call SendMessage("Stop"); maybe stop everybody!!
-		yield; //XXX: be sure
+	print("Player " + playerThrow + " hits to player " + playerHit);
+	if (PlayerTeam(playerHit) == PlayerTeam(playerThrow)) { //if a person hits to a member of its own team (included himself): no burn 
+		print("Hit to a member of its own team: no burn");
+		return false;
 	}
 	
+	return true;
+}
+
+//rule: if someone throws the ball and and an opponent catches the ball without grounding: burn the thrower player
+function CheckBurnThrowPlayer(playerCatch: int, playerThrow: int) : boolean { //check if we can burn the player who thrown the ball
+	if ((personThrow == NOPLAYER) || (playerCatch == NOPLAYER))
+		return false;
+		
+	if ((burned[playerThrow]) || (burningID != NOPLAYER) || (ballGrounded)) //we also check the ball: if it touches the ground, no burn
+		return false;
+		
+	print("Player " + playerThrow + " throw ball but player " + playerCatch + " catches the ball before grounded");
+	if (PlayerTeam(playerThrow) == PlayerTeam(playerCatch)) { //if both are on the seam team: nothing, it's only a ball pass
+		print("But really, player pass ball to a member of its own team: no burn");
+		return false;
+	}
+	
+	return true;
+}
+
+
+function BurnPassPlayer(playerID: int) {
+	print("burnpassplayerrrr");
+	SpecialViewToPlayer(playerID);
+	yield BurnPlayer(playerID);
+	print("burnpassplayer: fin burn playerrr");
+	yield BallToPlayer_Quit(playerID);
+	RestoreCameras();
+}
+
+function BurnPlayer(playerID: int) { //burn the player. it's called in OnBallGrounded with yield for stop. note: call this after CheckBurnPlayer()
+	print("Burning Player ID = " + playerID);
+	
+	ball.SendMessage("SetCaught", true); //we need to set the as caught (even in the ground). reason: other IAPlayer could catch it
+	/*if (!HasIA(playerID)) { //need to be IA for move automatically. note that gPlayerID variable continues because gamer will be regain control
+		//players[playerID].SendMessage("SetIAPlayer");  //yield players[playerID].GetComponent(PlayerBallController).SetIAPlayer();
+		players[playerID].SendMessage("StopControl"); //XXX: maybe stop everybody, and after ReactivateControl()
+		yield WaitForSeconds(2); //XXX: be sure
+	}*/
+		
+	burned[playerID] = true;
+	burningID = playerID; //this action must be after the check HasIA()
 	yield StopIAPlayers(); //temporally IAPlayers idle. UpdateAllIActions() will be called in OnBallCatched to reactivate the actions of them
 	
 	//See how to move player to the area of burned
@@ -507,45 +614,52 @@ function BurnPlayer(playerID: int) { //burn a player. it's called in OnBallGroun
 	}
 	else if (burnSound)
 			audio.PlayOneShot(burnSound);
-	
-	if ((PlayerTeam(playerID) == 1) || (OneGamer())) //the video of seeing player moving to new area: only in camera of the same team
-		camera1.SendMessage("SetTarget", players[playerID].transform);
-	else	
-		camera2.SendMessage("SetTarget", players[playerID].transform);
-		
+
+	//SpecialViewToPlayer(playerID);
 	s_groundC.IgnoreCollision(players[playerID], true); //let player cross the limits of ground for move to new area //s_groundC.SetStateLimits(false);
-	s_PrisonHUD.OnBurned(players[playerID].GetComponent(BallPlayer).GetName(), PlayerTeam(playerID)); //display on HUD the message of burned
+	s_PrisonHUD.OnBurned(playerNames[playerID], PlayerTeam(playerID)); //display on HUD the message of burned
 	yield WaitForSeconds(timeGrounded);
 	
+	debugMovingPos = pos; //XXX, temporally for debug: DrawGizmos
 	//XXX: variable movingToNewPosition = stopGame para que los demas jugadores esten quietitos
-	yield MoveTo(players[playerID], pos, timeToMovePosition); //yield WaitForSeconds(timeToMovePosition + 2); 
+	//yield MoveTo(players[playerID], pos, timeToPosition + 1); //yield WaitForSeconds(timeToPosition + 2); 
+	yield players[playerID].GetComponent(PlayerMoveController).MoveTo(pos, runToPosition, timeToPosition + 1); //XXX
 	
 	s_groundC.IgnoreCollision(players[playerID], false); // once player move to new position, prohibit him not cross limits again //s_groundC.SetStateLimits(true);
 	
-	yield ReorganizePlayers(); //StartCoroutine(ReorganizePlayers()); 
-	//print("going call BallToPlayer");
-	if (playerID == gplayerID1) //if player was controlled by a gamer, recover its control
+	yield ReorganizePlayers(); //players[playerID].SendMessage("IMoveToDefault");
+	yield WaitForSeconds(1);
+	
+	/*if (!HasIA(playerID)) { //XXX:
+		players[playerID].SendMessage("ReactivateControl"); //if player was controlled by a gamer, recover its control
+		WaitForSeconds(2); //XXX: be sure
+	}*/
+	
+	/*if (playerID == gplayerID1) //if player was controlled by a gamer, recover its control
 		yield SetGamer(playerID, 1);
 	else if (playerID == gplayerID2)
 		yield SetGamer(playerID, 2);
+	yield WaitForSeconds(2);*/
 	
-	yield BallToPlayer_Quit(playerID); //if he's IA yet, depending of the situation will be called or not SetGamer() in OnBallCatched()
-	//yield;
-	print("fin burning " + playerID); //XXX: be sure to wait
-	burningID = NOPLAYER;
+	//yield BallToPlayer_Quit(playerID); RestoreCameras(); yield; //if he's IA yet, depending of the situation will be called or not SetGamer() in OnBallCatched()
+	print("end burning " + playerID); //XXX: be sure to wait //burningID = NOPLAYER in Clear_Throw_Touch_Burning(), in OnBallCatched()
 }
 
-
-function ReorganizePlayers() { // Reorganize players inside its respective areas. Note: it will be called as a coroutine for wait to enable again the players
+/* Reorganize players inside its respective areas. 
+   Note: all the players must be IAPlayers, so the change of control must be before call this functions
+   Note: it will be called as a coroutine for wait to enable again the players */
+function ReorganizePlayers() { 
 	var contBurned = 0;
 	var contAlive = 0;
 	var pos : Vector3;
 	var rot : Quaternion;
 	
+	//print("start Reorganize players");
+	
 	for (var i=0; i < nPlayersTeam; i++) { //team 1
 		if (burned[i]) {
 			pos = s_groundC.GetPosition(s_groundC.BURNED1, nBurned1, contBurned);
-			rot = Quaternion(0, 1, 0, 0);
+			rot = Quaternion.Euler(0, 180, 0);
 			contBurned++;
 		}	
 		else {
@@ -554,10 +668,11 @@ function ReorganizePlayers() { // Reorganize players inside its respective areas
 			contAlive++;
 		}
 				
-		//XXX: players[i].SetActiveRecursively(true); //reactivate the players (just in case). //if (i != playerID)
 		players[i].SendMessage("SetDefaultPosition", pos);
 		players[i].SendMessage("SetDefaultRotation", rot);
-		players[i].SendMessage("IMoveToDefault"); //immediate move to the default position and rotation
+		yield; yield;
+		players[i].SendMessage("IMoveToDefault"); //immediate move to the default position and rotation*/
+		//players[i].GetComponent(PlayerMoveController).SetIMove
 		
 	} //for
 	
@@ -572,28 +687,29 @@ function ReorganizePlayers() { // Reorganize players inside its respective areas
 		}	
 		else {
 			pos = s_groundC.GetPosition(s_groundC.GAME2, nPlayersTeam - nBurned2, contAlive);
-			rot = Quaternion(0, 1, 0, 0);
+			rot = Quaternion.Euler(0, 180, 0);
 			contAlive++;
 		}
 				
-		//players[i].SetActiveRecursively(true);
 		players[i].SendMessage("SetDefaultPosition", pos);
 		players[i].SendMessage("SetDefaultRotation", rot);
+		yield; yield;
 		players[i].SendMessage("IMoveToDefault");
 		
 	} //for
 	
-	yield; //wait for next frame //print("Finished reorganize players");
+	yield; //wait for next frame 
+	//print("Finished reorganize players (inside function)");
 }
 
 
-function OnChangePlayer(playerID: int) { //when a gamer without ball wants to change the control to other player of its team
+function OnChangePlayer(playerID: int) { //when a gamer playerID without ball wants to change the control to other player of its team: to the newID
 	//select the nearest player in the same area
 	print("OnChangePlayer " + playerID);
 	if (!fifa) // (nControlled1 == nPlayersTeam) if checked at the beginning to set fifa variable
 		return;
 		
-	var passID = NOPLAYER;
+	var newID = NOPLAYER; //player to pass
 	var gamer : int;
 	var other_gplayerID : int;
 	
@@ -608,10 +724,10 @@ function OnChangePlayer(playerID: int) { //when a gamer without ball wants to ch
 	else
 		return; //playerID must be controlled by a gamer, in other case exit
 
-	passID = NearestPlayer(playerID, other_gplayerID, PlayerTeam(playerID));
+	newID = NearestPlayer(playerID, other_gplayerID, PlayerTeam(playerID));
 	
-	if (passID != NOPLAYER)
-		UpdateGamer(passID, gamer);
+	if (newID != NOPLAYER)
+		UpdateGamer(newID, gamer);
 }
 
 
@@ -621,7 +737,7 @@ function OnFarChangePlayer(playerID: int) {
 	if (!fifa)
 		return;
 		
-	var passID = NOPLAYER;
+	var newID = NOPLAYER;
 	var gamer : int;
 	var other_gplayerID : int;
 	var i : int;
@@ -644,12 +760,12 @@ function OnFarChangePlayer(playerID: int) {
 		if (nBurned1) {
 			for (i = 0; i < nPlayersTeam; i++) //search the first player in the other area
 				if ((oldBurned != burned[i]) && (i != other_gplayerID)) { //the player to pass is in the other area: different state
-					passID = i;
+					newID = i;
 					break;
 				}
 		}	
 		else
-			passID = NearestPlayer(playerID, other_gplayerID, 1); //if no players burned, only pass to the nearest player of its area
+			newID = NearestPlayer(playerID, other_gplayerID, 1); //if no players burned, only pass to the nearest player of its area
 	
 	}
 	else { //team 2
@@ -657,17 +773,17 @@ function OnFarChangePlayer(playerID: int) {
 		if (nBurned2) {
 			for (i = nPlayersTeam; i < nPlayersTeam*2; i++) //search the first player in the other area
 				if ((oldBurned != burned[i]) && (i != other_gplayerID)) { //the player to pass is in the other area: different state
-					passID = i;
+					newID = i;
 					break;
 				}
 		}	
 		else
-			passID = NearestPlayer(playerID, other_gplayerID, 2);
+			newID = NearestPlayer(playerID, other_gplayerID, 2);
 	}
 	
 	
-	if (passID != NOPLAYER)
-		UpdateGamer(passID, gamer);
+	if (newID != NOPLAYER)
+		UpdateGamer(newID, gamer);
 }
 
 /*function Clean() { //XXX: secure clean variables: delete vectors
@@ -690,8 +806,32 @@ function OneGamer() {
 	return ((nControlled1 == 1) && (nControlled2 == 0));
 }
 
+function GamerVersusGamer() {
+	return ((nControlled1 == 1) && (nControlled2 == 1));
+}
 
-function SetGamer(playerID: int, gamer: int) { //set the control to a gamer (1 or 2). key or kinect
+function GamersBoth() {
+	return (nControlled1 == 2); //no need to check (nControlled2 == 0)
+}
+
+
+function OtherGamer(gamer : int) { //return the other gamer
+	if (gamer == 1)
+		return 2;
+	else
+		return 1;
+}
+
+/*function OtherGamer(gamer : int) { //return the player ID of the other gamer
+	if (gamer == 1)
+		return gplayerID2;
+	else
+		return gplayerID1;
+}*/
+
+//set the control to a gamer (1 or 2). key or kinect.
+//the use of only one player by gamer, it's guarantied in UpdateGamer()
+function SetGamer(playerID: int, gamer: int) { 
 	print("SetGamer: playerID = " + playerID + " by gamer " + gamer);
 	lastGamer = gamer;
 	if (!HasIA(playerID)) //player already controlled by the gamer. it's guaranteed with correct gamer
@@ -702,7 +842,7 @@ function SetGamer(playerID: int, gamer: int) { //set the control to a gamer (1 o
 		camera1.SendMessage("SetTarget", players[playerID].transform); 
 	}
 	else { //gamer == 2
-		if ((nControlled1 != 2) && (nControlled2 != 1)) { //by security, check if are two gamers
+		if (OneGamer()) { //by security, check if are two gamers
 			print("SetGamer: error: there isn't a second gamer");
 			return;
 		}
@@ -720,17 +860,39 @@ function SetGamer(playerID: int, gamer: int) { //set the control to a gamer (1 o
 	yield; //XXX: outside be sure to end the SendMessage
 }
 
+
+//update player to be the new gamer. the pass gamer-player will be IAPlayer
+//note that in OnBallCatched() is guarantied that two gamers are not in conflict
+function UpdateGamer(playerID: int, gamer: int) { 
+	var passGPlayerID : int; //the pass player who has controlled by the gamer
+	if (gamer == 1)
+		passGPlayerID = gplayerID1;
+	else
+		passGPlayerID = gplayerID2;
+	
+	//print("gamer = " + gamer + " id1 = "  + gplayerID1 + " id2 = " + gplayerID2);
+	if (passGPlayerID != playerID) { //different player. note: first IA, after that set gamer
+		players[passGPlayerID].SendMessage("SetIAPlayer"); //pass gPlayer1 set as IA. 
+		yield;
+		players[passGPlayerID].SendMessage("SetHelp"); //help to the new gamer
+ 		SetGamer(playerID, gamer); //update the new gPlayerID
+		yield;
+	}
+}
+
+
 function StopIAPlayers() {
 	for (var i = 0; i < nPlayersTeam*2; i++) //temporally set every IAPlayer idle
 		if (HasIA(i))
-			players[i].SendMessage("SetHelp");
+			players[i].SendMessage("SetHelp"); //TODO: maybe SetIdle
 	yield; //for call yield in BurnPlayer(), for wait until this function finishes
-	
-	/*var i : int; //players[playerID].SendMessage("SetDefaultPosition", pos); //it will be setted in ReorganizePlayers()
-	for (i=0; i < nPlayersTeam*2; i++)
-		if (i != playerID)
-			players[i].SetActiveRecursively(false); //desactivate the other players*/
 }
+
+/*function StopEverybody() {
+	StopIAPlayers();
+	players[gplayerID1].SendMessage("StopControl");
+	players[gplayerID2].SendMessage("StopControl");
+}*/
 
 
 function UpdateTurn(ownerID: int) { //update current turn of game. if turn is changed send message
@@ -799,7 +961,7 @@ function UpdateIActions(playerThrow: int, playerCatch: int) { //playerCatch == o
 	}
 	
 	//2) playerID: Person who caught the ball
-	if (HasIA(playerCatch)) //nControlled2 == 0 && PlayerTeam(playerCatch) == 2. Note: the control must be updated before!!
+	if (HasIA(playerCatch)) //nControlled2 == 0 && PlayerTeam(playerCatch) == 2. Note: the control MUST be updated before!!
 		players[playerCatch].SendMessage("SetAttack"); //IAPlayer to set action of attack
 
 	yield;
@@ -807,26 +969,43 @@ function UpdateIActions(playerThrow: int, playerCatch: int) { //playerCatch == o
 
 //posible functions GamerOff(gamer), GamersOff(), GamersOn()
 
-function UpdateGamer(playerID: int, gamer: int) { //update player to be the new gamer. the pass gamer-player will be IAPlayer
-	var passGPlayerID : int; //the pass player who has controlled by the gamer
-	if (gamer == 1)
-		passGPlayerID = gplayerID1;
-	else
-		passGPlayerID = gplayerID2;
-		
-	if (passGPlayerID != playerID) { //note: first IA, after that set gamer
-		players[passGPlayerID].SendMessage("SetIAPlayer"); //pass gPlayer1 set as IA. 
-		yield;
-		players[passGPlayerID].SendMessage("SetHelp"); //help to the new gamer
- 		SetGamer(playerID, gamer); //update the new gPlayerID
-		yield;
+
+/* Set Full Screen to follow a player (change target of camera1 and desactivates camera2.
+   This is only temporal for see a special video scene of him.
+   This is useful for situations that we need to see a special action of a player, independent if he's a gamer or a IAPlayer.
+   Examples of special scenes to view: 
+   - Burned or revived player moving to his new area
+   - Player who makes a combo attack
+   
+   Note that is OBLIGATORY to call RestoreCameras() after*/
+function SpecialViewToPlayer(playerID : int) {
+	camera1.SendMessage("SetTarget", players[playerID].transform);
+	
+	if (!OneGamer()) {
+		camera1.camera.rect = Rect(0, 0, 1, 1); //full screen
+		camera2.camera.rect = Rect(0, 0, 0, 0); //no need to desactive the object
 	}
 }
 
+/* After see a special video of a player with the function SpecialViewToPlayer, we need to restore the states of cameras.
+   The cameras changed before will be follow the correct players again: the players who are controlled by gamers */
+function RestoreCameras() {
+	camera1.SendMessage("SetTarget", players[gplayerID1].transform);
+	camera1.SendMessage("Center");	
+		
+	if (!OneGamer()) {
+		camera2.SendMessage("SetTarget", players[gplayerID2].transform);
+		camera1.camera.rect = Rect(0, 0, 0.5, 1); 
+		camera2.camera.rect = Rect(0.5, 0, 0.5, 1);
+		camera2.SendMessage("Center");
+	}
+}
 
-function Clear_Touch_Throw() { //clear these two variables
-	personTouched = NOPLAYER; //asi nadie es tocado, y asi no podrian brilarse en esta situacion
+function ClearFlags() { //clear variables relationated to burning player. called after finish catch the ball
+	personTouched = NOPLAYER; //nobody touched, so nobody to burn
 	personThrow = NOPLAYER; //clear who throws the ball after someone catch it, no before!!
+	burningID = NOPLAYER; //no current burning
+	ballGrounded = false; //forget that the ball was grounded
 }
 
 
@@ -860,22 +1039,26 @@ function NearestPlayer(playerID : int, dismissID : int, team : int) { //search f
 	return nearestID;
 }
 
-
+//maybe TODO:
 //function NearestPlayer: devolver gameobject
 //function NearestPlayer: parametro area
 //function NearestPlayer: elegir que area, quiza en IAPlayerController
 
 //****** generic functions to use in any other script **********************
 
-//XXX: maybe put this function in BallPlayer.js
-function MoveTo(obj: GameObject, pos: Vector3, maxTime: float) { //move obj to the position pos, with a maximum time
-	obj.animation.CrossFade("walk"); //NOTE: learn more about animations
+//TODO: call MoveTo from PlayerMoveController.js
+/*function MoveTo(obj: GameObject, pos: Vector3, maxTime: float) { //move obj to the position pos, with a maximum time
+	obj.animation.CrossFade("walk"); //TODO: put in PlayerAnimation.js. learn more about animations
 	var time : float = 0.0; //MoveTo
 	var angle : float; //XXX: creo que no hace falta porque pos es fija
 	var direction : Vector3;
 	var move : float;
 	
-	obj.transform.LookAt(pos); //rotate to see te new position
+	//obj.GetComponent(PlayerMoveController).RotateTo(pos, 3.0, maxTime); 
+	obj.SendMessage("IRotateTo", pos);
+	//obj.transform.LookAt(pos); //rotate to see te new position
+	yield WaitForSeconds(1);
+	//print("end rotate");
 	
 	while (time < maxTime) { 
 		time += Time.deltaTime;	
@@ -892,7 +1075,8 @@ function MoveTo(obj: GameObject, pos: Vector3, maxTime: float) { //move obj to t
 	obj.animation.CrossFade("idle");	
 	obj.transform.position = pos; //IMove: partial solution to the XXX above
 	yield;
-}
+	//print("finish moveTo");
+}*/
 
 
 function PlayerTeam(playerID: int) { //returns the team of a player. it's equivalent to: players[playerID].GetComponent("BallPlayer").team but now it's more efficient
@@ -902,9 +1086,14 @@ function PlayerTeam(playerID: int) { //returns the team of a player. it's equiva
 		return 2;
 }
 
+
+/*function PlayerName(playerID: int) {
+	return players[playerID].GetComponent(PlayerBallController).GetName();
+}*/
+
 function HasIA(playerID: int) { //returns true if player is a IAPlayer. it's equivalent to: players[playerID].GetComponent("BallPlayer").HasIA(), but now it's more efficient
-	if (burningID != NOPLAYER) //when player is burned he's moving to burn area as a IAPlayer. all players are IAPlayer only at that time
-		return true;
+	//if (burningID != NOPLAYER) //when player is burned he's moving to burn area as a IAPlayer. all players are IAPlayer only at that time
+	//	return true;
 		
 	return (playerID != gplayerID1) && (playerID != gplayerID2);
 	//return !VectorControlled[playerID];
@@ -917,4 +1106,13 @@ function BallPositionToPlayer(playerID: int) {
 	/*var y = ball.transform.position.y; //se coloca la pelota enfrente del jugador
 	ball.transform.position = players[playerID].transform.position + Vector3.forward; //players[playerID].transform.forward; //+ players[playerID].transform.up * 30; // * 20;//forward;
 	ball.transform.position.y = y; */
+}
+
+
+
+function OnDrawGizmos() { //in scene view for debugging: when a player is moving to a new area, draw the new position
+	if (burningID != NOPLAYER) { //TODO: || reviving
+		Gizmos.color = Color.red;
+		Gizmos.DrawWireSphere(debugMovingPos, 1.0); 
+	}
 }

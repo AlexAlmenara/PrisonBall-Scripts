@@ -50,10 +50,14 @@ function LoadGround(n1 : int, n2: int) {
 	isLoading = true;
 	nControlled1 = n1;
 	nControlled2 = n2;
-	//XXX: kinect, fifa
+	//TODO: kinect, fifa
 	print("LOAD GROUND");
 	Application.LoadLevel("Ground1"); // load the game level.
 }
+
+/*function OnLoad() { // this idea no works...
+	Application.LoadLevel("Ground1"); // load the game level.
+}*/
 
 // Make the script also execute in edit mode
 @script ExecuteInEditMode()

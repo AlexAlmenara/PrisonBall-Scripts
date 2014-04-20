@@ -23,7 +23,7 @@ var layerIgnoreGround = 10; //layer to set to the burning player for cross the l
 	"OUT1" : -1 
 };*/
 
-//areas del juego
+//game areas
 static var OUT2 = -2;
 static var BURNED2 = 22;
 static var GAME2 = 2;
@@ -152,10 +152,10 @@ function Start () {
 	planeRight1 = GameObject.Find("/Ground/Planes/Plane1/PlaneRight1").transform;
 	planeRight2 = GameObject.Find("/Ground/Planes/Plane2/PlaneRight2").transform;
 	
-	yield UpdateDimensions(); //yield StartCoroutine("UpdateDimensions"); //esto se podria hacer desde PrisonRules.js para asegurar que esto suceda antes de creacion de jugadores
+	yield UpdateDimensions();
 	yield SetStateLimits(true);
 	Physics.IgnoreLayerCollision(layerGround, layerIgnoreGround, true); 
-	GameObject.FindWithTag("PrisonRules").SendMessage("PassiveStart"); //una vez definido el campo se crean y se colocan los jugadores
+	GameObject.FindWithTag("PrisonRules").SendMessage("PassiveStart"); //when the ground is defined, then will create the players and place them
 }
 
 
@@ -256,22 +256,22 @@ function GetPosition(area: int, n: int, i: int) {
 	switch (area) {
 		
 		case BURNED2:
-			pos = limitEnd1.transform.position; // = this.transform.position;
+			pos = limitEnd1.position; // = this.transform.position;
 			areaHeight = heightBurned1;
 			break;
 		
 		case GAME1: 
-			pos = limitInside1.transform.position; 
+			pos = limitInside1.position; 
 			areaHeight = heightGame1;
 			break;
 			
 		case GAME2: 
-			pos = limitCenter.transform.position; 
+			pos = limitCenter.position; 
 			areaHeight = heightGame2;
 			break;
 			
 		case BURNED1: 
-			pos = limitInside2.transform.position; 
+			pos = limitInside2.position; 
 			areaHeight = heightBurned2;
 			break;
 			

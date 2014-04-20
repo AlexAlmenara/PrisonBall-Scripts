@@ -11,7 +11,7 @@ var gameOverShadowScale = 1.61;
 
 var message = "Game Over";
 
-//TODO: que se parezca al de StartMenu.js
+//TODO: que se parezca al de StartMenu.js o al reves
 
 function OnGUI() {
 	GUI.Label ( Rect( (Screen.width - (Screen.height * 2)) * 0.75, 0, Screen.height * 2, Screen.height), "", background); //style background
